@@ -221,33 +221,49 @@ void StyleEngine::setPartMuted (int destCh, bool mute)
     }
 }
 
-// isDrumChannel removido — agora usa synthEngine.isDrumBank(ch) dinâmicamente
-
 // ─── onMidiFromStyle ─────────────────────────────────────────────────────────
+// Segue a arquitetura real do PSR:
+//  1. Consulta CASM para obter NTR/NTT/HighKey/Limits do canal
+//  2. Drums (bankMsb=127 ou NTR=BYPASS): passam direto
+//  3. Note Off: usa noteMap para casar com o Note On original
+//  4. Note On: transpõe via TransposeEngine com parâmetros CASM
+//  5. CC/PC/SysEx: passam direto no canal original
 void StyleEngine::onMidiFromStyle (const juce::MidiMessage& rawMsg)
 {
     const int sourceCh = rawMsg.getChannel() - 1; // 0-indexed (0-15)
     if (sourceCh < 0 || sourceCh > 15) return;
 
-    // Verificar mute da parte (partIdx 0-7 para canais 8-15)
-    const int partIdx = sourceCh - 8;
+    // ── Consultar CASM para este canal ───────────────────────────────────────
+    CasmChannel casmCh;  // defaults: NTR=BYPASS, highKey=127, full range
+    bool hasCasm = false;
+    const int casmIdx = currentSty.casmIndex[sourceCh];
+    if (casmIdx >= 0 && casmIdx < (int)currentSty.casmChannels.size())
+    {
+        casmCh = currentSty.casmChannels[casmIdx];
+        hasCasm = true;
+    }
+
+    // Drum = CASM diz BYPASS, ou bankMsb=127 (fallback sem CASM)
+    const bool isDrum = (hasCasm && casmCh.ntr == NTR::BYPASS)
+                      || synthEngine.isDrumBank (sourceCh);
+
+    // ── Mute: usa destChannel do CASM para o partIdx ─────────────────────────
+    const int destCh  = hasCasm ? casmCh.destChannel : sourceCh;
+    const int partIdx = destCh - 8;
     if (partIdx >= 0 && partIdx < 8 && partMuted[partIdx]) return;
 
-    // ── CC, PC, SysEx: enviar diretamente sem modificação ────────────────────
+    // ── CC, PC, SysEx: enviar diretamente ────────────────────────────────────
     if (!rawMsg.isNoteOn() && !rawMsg.isNoteOff())
     {
-        // Enviar no canal original para que o FluidSynth mantenha o timbre
         synthEngine.sendMidiMessage (rawMsg);
         return;
     }
 
-    // ── Note On/Off ──────────────────────────────────────────────────────────
+    // ── Note Off: usar noteMap (nota salva no Note On correspondente) ────────
     const int origNote = rawMsg.getNoteNumber();
 
     if (rawMsg.isNoteOff() || (rawMsg.isNoteOn() && rawMsg.getVelocity() == 0))
     {
-        // NOTE OFF: usar a nota transposta que foi salva no Note On correspondente.
-        // Isso evita notas presas quando o acorde muda entre Note On e Note Off.
         const int saved = noteMap[sourceCh][origNote];
         if (saved >= 0)
         {
@@ -258,17 +274,11 @@ void StyleEngine::onMidiFromStyle (const juce::MidiMessage& rawMsg)
         return;
     }
 
-    // NOTE ON: transpor e salvar o mapeamento
+    // ── Note On ──────────────────────────────────────────────────────────────
     int note = origNote;
 
-    if (!synthEngine.isDrumBank (sourceCh))
+    if (!isDrum)
     {
-        // Correção de oitava para canais com notas em registro de baixo.
-        // STY files gravam o baixo em C1/G0 (MIDI 19-36) — precisa subir 2 oitavas
-        // para a tessitura real. Aplica a qualquer canal não-drum com notas graves.
-        if (note < 36)
-            note += 24;
-
         ChordInfo chord;
         {
             juce::ScopedLock sl (chordLock);
@@ -276,14 +286,27 @@ void StyleEngine::onMidiFromStyle (const juce::MidiMessage& rawMsg)
         }
 
         if (chord.valid)
-            note = TransposeEngine::transposeRoot (note, chord);
+        {
+            // Usar TransposeEngine com os parâmetros CASM do canal:
+            // NTR::ROOT   → shift paralelo (Phrase/melody)
+            // NTR::GUITAR → Root Fixed / close-voice (Chord/Pad)
+            // NTR::BASS   → segue fundamental (Bass)
+            // NTR::BYPASS → sem transposição
+            NTR ntr = hasCasm ? casmCh.ntr : NTR::ROOT;
+            NTT ntt = hasCasm ? casmCh.ntt : NTT::MELODY;
+            int hk  = hasCasm ? casmCh.highKey : 127;
+            int lo  = hasCasm ? casmCh.noteLowLimit  : 0;
+            int hi  = hasCasm ? casmCh.noteHighLimit  : 127;
+
+            note = TransposeEngine::transposeNote (note, chord, ntr, ntt, hk, lo, hi);
+        }
 
         note += transposeOffset;
     }
 
     note = std::clamp (note, 0, 127);
 
-    // Salvar o mapeamento origNote→transposedNote para o Note Off futuro
+    // Salvar mapeamento para o Note Off futuro
     noteMap[sourceCh][origNote] = note;
 
     auto msg = juce::MidiMessage::noteOn (sourceCh + 1, note, rawMsg.getVelocity());

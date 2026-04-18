@@ -145,30 +145,44 @@ bool CasmParser::parseCtab (const uint8_t* data, size_t size, CasmChannel& ch)
     if (size < 20) return false;
 
     ch.sourceChannel = data[0] & 0x0F;
-    // data[1..8] = nome da parte (ignorado)
     ch.destChannel   = data[9] & 0x0F;
 
-    // NTT e campos restantes dependem do tamanho
-    // No SFF1, o NTT (byte [21]) é o controle principal de transposição.
-    // O byte [13] é apenas tipo de canal (03=melodic, 07=drum).
+    // Extrair nome da parte (bytes [1-8], 8 chars ASCII, space-padded)
+    ch.partName = juce::String ((const char*)(data + 1), 8).trim();
+
+    // Detectar drums: byte [13]=0x07 ou byte [20]=0x01
     bool isDrum = (data[13] == 0x07) || (size > 20 && data[20] == 0x01);
 
     if (size >= 25)
     {
-        // Layout completo de 27 bytes
+        // ── Layout completo de 27 bytes ──────────────────────────────────────
         ch.ntt = static_cast<NTT> (std::min<uint8_t> (data[21], 3));
 
-        // Derivar NTR a partir do NTT para SFF1:
-        //   drums/NTT=BYPASS → BYPASS (sem transposição)
-        //   NTT=MELODY/CHORD/MELODIC_MINOR → ROOT (shift por fundamental + correção de tipo)
+        // Derivar NTR a partir do NTT (SFF1):
+        //  - Drums / NTT=BYPASS → NTR::BYPASS (sem transposição)
+        //  - NTT=CHORD         → NTR::GUITAR (Root Fixed: inversões próximas)
+        //  - NTT=MELODY        → NTR::ROOT   (Root Transpose: shift paralelo)
+        //  - NTT=MELODIC_MINOR → NTR::BASS   (segue fundamental do baixo)
         if (isDrum || ch.ntt == NTT::BYPASS)
             ch.ntr = NTR::BYPASS;
+        else if (ch.ntt == NTT::CHORD)
+            ch.ntr = NTR::GUITAR;    // Root Fixed — Chord1, Chord2, Pad
+        else if (ch.ntt == NTT::MELODIC_MINOR)
+            ch.ntr = NTR::BASS;      // Bass
         else
-            ch.ntr = NTR::ROOT;
-        // data[22] NÃO é um MIDI note para HighKey (valores 3,6,7 observados).
-        // É um indicador de registro/oitava do voice part. Usar 127 para
-        // não restringir as notas transpostas via while(note > highKey).
-        ch.highKey       = 127;
+            ch.ntr = NTR::ROOT;      // NTT::MELODY — Phrase1, Phrase2
+
+        // HighKey: byte [22] é um indicador de oitava (valores 3,6,7 observados).
+        // Converter para nota MIDI: oitava N → última nota da oitava = (N+1)*12 - 1
+        // Ex: 3→47(B3), 6→83(B6), 7→95(B7). Se >= 12, tratar como MIDI note direto.
+        uint8_t rawHK = data[22];
+        if (rawHK == 0 || rawHK >= 127)
+            ch.highKey = 127;
+        else if (rawHK < 12)
+            ch.highKey = (uint8_t)((rawHK + 1) * 12 - 1);
+        else
+            ch.highKey = rawHK;
+
         ch.noteLowLimit  = data[23];
         ch.noteHighLimit = data[24];
         ch.rTag          = (size >= 26) ? data[25] : 0;
@@ -176,7 +190,7 @@ bool CasmParser::parseCtab (const uint8_t* data, size_t size, CasmChannel& ch)
     }
     else
     {
-        // Layout curto (fallback para arquivos com Ctab menor)
+        ch.ntr           = isDrum ? NTR::BYPASS : NTR::ROOT;
         ch.ntt           = NTT::BYPASS;
         ch.highKey       = 127;
         ch.noteLowLimit  = 0;
@@ -184,6 +198,15 @@ bool CasmParser::parseCtab (const uint8_t* data, size_t size, CasmChannel& ch)
         ch.rTag          = 0;
         ch.muteFlags     = 0;
     }
+
+    DBG ("  Ctab: src=" + juce::String (ch.sourceChannel)
+         + " dst=" + juce::String (ch.destChannel)
+         + " \"" + ch.partName + "\""
+         + " NTR=" + juce::String ((int)ch.ntr)
+         + " NTT=" + juce::String ((int)ch.ntt)
+         + " HK=" + juce::String (ch.highKey)
+         + " lo=" + juce::String (ch.noteLowLimit)
+         + " hi=" + juce::String (ch.noteHighLimit));
 
     return true;
 }

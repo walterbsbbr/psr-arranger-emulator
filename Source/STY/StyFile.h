@@ -38,12 +38,13 @@ struct CasmChannel
     uint8_t destChannel    { 8 };   // canal de destino (8-15 = ch 9-16)
     NTR     ntr            { NTR::BYPASS };
     NTT     ntt            { NTT::BYPASS };
-    uint8_t highKey        { 127 }; // nota MIDI máxima antes de oitavar
+    uint8_t highKey        { 127 }; // nota MIDI máxima antes de oitavar para baixo
     uint8_t noteLowLimit   { 0   };
     uint8_t noteHighLimit  { 127 };
     uint8_t rTag           { 0   }; // retrigger rule
     uint16_t muteFlags     { 0   }; // bitfield por tipo de acorde
     bool    closeHarmony   { false };
+    juce::String partName;           // nome da parte do Ctab (ex: "Bass", "Chord1")
 };
 
 /**
