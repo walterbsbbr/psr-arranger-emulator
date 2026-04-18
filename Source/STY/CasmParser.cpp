@@ -158,11 +158,14 @@ bool CasmParser::parseCtab (const uint8_t* data, size_t size, CasmChannel& ch)
     {
         // Layout completo de 27 bytes
         ch.ntt           = static_cast<NTT> (std::min<uint8_t> (data[21], 3));
-        ch.highKey       = data[22];
+        // data[22] NÃO é um MIDI note para HighKey (valores 3,6,7 observados).
+        // É um indicador de registro/oitava do voice part. Usar 127 para
+        // não restringir as notas transpostas via while(note > highKey).
+        ch.highKey       = 127;
         ch.noteLowLimit  = data[23];
         ch.noteHighLimit = data[24];
         ch.rTag          = (size >= 26) ? data[25] : 0;
-        ch.muteFlags     = 0; // SFF1 Ctab não tem muteFlags inline; default = sem mute
+        ch.muteFlags     = 0;
     }
     else
     {

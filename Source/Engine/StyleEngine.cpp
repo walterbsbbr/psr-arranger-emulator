@@ -179,29 +179,8 @@ void StyleEngine::onSectionEnded (StyleSection which)
 // ─── onChordChanged ──────────────────────────────────────────────────────────
 void StyleEngine::onChordChanged (const ChordInfo& chord)
 {
-    bool rootChanged = false;
-    {
-        juce::ScopedLock sl (chordLock);
-        if (chord.valid && currentChord.valid
-            && (chord.root != currentChord.root || chord.type != currentChord.type))
-        {
-            rootChanged = true;
-        }
-        currentChord = chord;
-    }
-
-    // Quando o acorde muda, as Note Off pendentes seriam transpostas
-    // com o NOVO acorde e não casariam com as Note On originais.
-    // Enviar all-notes-off nos canais de acompanhamento (9-16) para evitar
-    // notas presas.
-    if (rootChanged && state != State::Idle)
-    {
-        for (int ch = 8; ch < 16; ++ch)
-        {
-            auto msg = juce::MidiMessage::allNotesOff (ch + 1);
-            synthEngine.sendMidiMessage (msg);
-        }
-    }
+    juce::ScopedLock sl (chordLock);
+    currentChord = chord;
 }
 
 // ─── BPM e transpose ─────────────────────────────────────────────────────────
