@@ -27,7 +27,8 @@
  *     ├─ StyleEngine         (motor do arranjador)
  *     └─ UI Panels
  */
-class MainComponent : public juce::AudioAppComponent
+class MainComponent : public juce::AudioAppComponent,
+                      private juce::Timer
 {
 public:
     MainComponent();
@@ -43,6 +44,8 @@ public:
     void resized () override;
 
 private:
+    void timerCallback() override;
+
     void loadStyleFile();
     void openSetupDialog();
     void saveState();

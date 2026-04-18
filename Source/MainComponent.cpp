@@ -34,10 +34,14 @@ MainComponent::MainComponent()
 
     // ── Restaurar estado anterior ─────────────────────────────────────────────
     restoreState();
+
+    // ── Timer para atualizar ChordDisplay (50ms) ────────────────────────────
+    startTimer (50);
 }
 
 MainComponent::~MainComponent()
 {
+    stopTimer();
     saveState();
     styleEngine.stop();
     midiRouter.closeMidiInput();
@@ -66,6 +70,12 @@ void MainComponent::getNextAudioBlock (const juce::AudioSourceChannelInfo& info)
 void MainComponent::releaseResources()
 {
     fluidSynth.releaseResources();
+}
+
+// ─── Timer: atualiza ChordDisplay a partir do ChordDetector ──────────────────
+void MainComponent::timerCallback()
+{
+    chordDisplay.setChord (chordDetector.getCurrentChord());
 }
 
 // ─── Layout ──────────────────────────────────────────────────────────────────
@@ -119,7 +129,14 @@ void MainComponent::loadStyleFile()
 
             if (styleEngine.loadStyle (file))
             {
-                transportPanel.setStyleName (styleEngine.getStyle().name);
+                const auto& sty = styleEngine.getStyle();
+                int numSections = 0;
+                for (auto& s : sty.sections)
+                    if (s.exists) ++numSections;
+
+                transportPanel.setStyleName (
+                    sty.name + " [" + juce::String (numSections) + " sec, "
+                    + juce::String (sty.defaultBpm, 0) + " BPM]");
             }
             else
             {
