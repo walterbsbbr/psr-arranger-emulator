@@ -148,16 +148,28 @@ bool CasmParser::parseCtab (const uint8_t* data, size_t size, CasmChannel& ch)
     // data[1..8] = nome da parte (ignorado)
     ch.destChannel   = data[9] & 0x0F;
 
-    // NTR: [13]=0x07 → drums (BYPASS), [13]=0x03 → melodic
-    // Também verificar [20]: 0x01 = drum
-    bool isDrum = (data[13] == 0x07) || (size > 20 && data[20] == 0x01);
-    ch.ntr = isDrum ? NTR::BYPASS : NTR::ROOT;
-
     // NTT e campos restantes dependem do tamanho
+    // No SFF1, o NTT (byte [21]) é o controle principal de transposição.
+    // O byte [13] é apenas tipo de canal (03=melodic, 07=drum).
+    bool isDrum = (data[13] == 0x07) || (size > 20 && data[20] == 0x01);
+
     if (size >= 25)
     {
         // Layout completo de 27 bytes
-        ch.ntt           = static_cast<NTT> (std::min<uint8_t> (data[21], 3));
+        ch.ntt = static_cast<NTT> (std::min<uint8_t> (data[21], 3));
+
+        // Derivar NTR a partir do NTT para SFF1:
+        //   drums        → BYPASS (sem transposição)
+        //   NTT=BYPASS   → BYPASS (sem transposição)
+        //   NTT=MELODY   → GUITAR (remapeia notas dentro da escala alvo)
+        //   NTT=CHORD    → GUITAR (remapeia notas para as notas do acorde alvo)
+        //   NTT=MELODIC_MINOR → BASS (baixo segue a fundamental do acorde)
+        if (isDrum || ch.ntt == NTT::BYPASS)
+            ch.ntr = NTR::BYPASS;
+        else if (ch.ntt == NTT::MELODY || ch.ntt == NTT::CHORD)
+            ch.ntr = NTR::GUITAR;
+        else // NTT::MELODIC_MINOR
+            ch.ntr = NTR::BASS;
         // data[22] NÃO é um MIDI note para HighKey (valores 3,6,7 observados).
         // É um indicador de registro/oitava do voice part. Usar 127 para
         // não restringir as notas transpostas via while(note > highKey).

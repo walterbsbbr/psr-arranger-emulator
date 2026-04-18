@@ -5,8 +5,6 @@
 // ─── Intervalos do acorde alvo ────────────────────────────────────────────────
 std::vector<int> TransposeEngine::chordNotes (const ChordInfo& chord)
 {
-    // Retorna as classes de nota (0-11) das notas do acorde alvo
-    // usando a mesma tabela de intervalos do ChordDetector
     static const std::vector<std::vector<int>> intervals =
     {
         { 0, 4, 7       },  // Major
@@ -35,10 +33,36 @@ std::vector<int> TransposeEngine::chordNotes (const ChordInfo& chord)
 
 std::vector<int> TransposeEngine::scaleNotes (const ChordInfo& chord)
 {
-    // Escala Maior do acorde (7 notas)
-    static const std::array<int,7> majorScale = { 0, 2, 4, 5, 7, 9, 11 };
+    // Escala adequada ao tipo de acorde (não sempre Maior!)
+    std::vector<int> scale;
+
+    switch (chord.type)
+    {
+        case ChordType::Minor:
+        case ChordType::Minor7:
+        case ChordType::MinorAdd9:
+            scale = { 0, 2, 3, 5, 7, 8, 10 };  // Natural minor (Aeolian)
+            break;
+        case ChordType::Minor7b5:
+            scale = { 0, 1, 3, 5, 6, 8, 10 };  // Locrian
+            break;
+        case ChordType::Dominant7:
+            scale = { 0, 2, 4, 5, 7, 9, 10 };  // Mixolydian
+            break;
+        case ChordType::Diminished:
+        case ChordType::Diminished7:
+            scale = { 0, 2, 3, 5, 6, 8, 9, 11 }; // Diminished (W-H)
+            break;
+        case ChordType::Augmented:
+            scale = { 0, 2, 4, 6, 8, 10 };      // Whole tone
+            break;
+        default:
+            scale = { 0, 2, 4, 5, 7, 9, 11 };   // Major (Ionian)
+            break;
+    }
+
     std::vector<int> notes;
-    for (int iv : majorScale)
+    for (int iv : scale)
         notes.push_back ((chord.root + iv) % 12);
     return notes;
 }
@@ -48,23 +72,9 @@ bool TransposeEngine::shouldMute (const CasmChannel& casmCh, const ChordInfo& ch
 {
     if (casmCh.muteFlags == 0) return false;
 
-    // Mapeamento simplificado de ChordType para bit do muteFlags
-    // (baseado na especificação CASM Yamaha SFF2)
     static const std::array<int, static_cast<int>(ChordType::Count)> typeToBit =
     {{
-        0,   // Major
-        1,   // Minor
-        2,   // Dominant7
-        3,   // Major7
-        4,   // Minor7
-        5,   // Minor7b5
-        6,   // Diminished
-        7,   // Diminished7
-        8,   // Augmented
-        9,   // Sus2
-        10,  // Sus4
-        11,  // Add9
-        12,  // MinorAdd9
+        0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12
     }};
 
     const int bit = typeToBit[static_cast<int>(chord.type)];
@@ -74,11 +84,8 @@ bool TransposeEngine::shouldMute (const CasmChannel& casmCh, const ChordInfo& ch
 // ─── transposeRoot ────────────────────────────────────────────────────────────
 int TransposeEngine::transposeRoot (int note, const ChordInfo& chord)
 {
-    // Os arquivos STY são gravados em CMaj (root = 0).
-    // Transposição: desloca todas as notas pelo intervalo C → nova_root
-    const int semitones = chord.root; // distância de C para o root do acorde
-    int transposed = note + semitones;
-    // Manter dentro de 0-127
+    // Shift simples: desloca pelo intervalo C → root
+    int transposed = note + chord.root;
     while (transposed > 127) transposed -= 12;
     while (transposed < 0)   transposed += 12;
     return transposed;
@@ -87,59 +94,115 @@ int TransposeEngine::transposeRoot (int note, const ChordInfo& chord)
 // ─── transposeBass ────────────────────────────────────────────────────────────
 int TransposeEngine::transposeBass (int note, const ChordInfo& chord)
 {
-    // Para o baixo: a nota C da gravação vira o baixo do acorde.
-    // Outras notas são transpostas pelo mesmo intervalo (root).
-    const int bassTarget = chord.bassNote;
-    int semitones = bassTarget; // C→bassNote
-    int transposed = note + semitones;
+    int transposed = note + chord.bassNote;
     while (transposed > 127) transposed -= 12;
     while (transposed < 0)   transposed += 12;
     return transposed;
 }
 
+// ─── Utilitário: encontra a nota mais próxima num conjunto ───────────────────
+static int findClosestNoteClass (int noteClass, const std::vector<int>& targets)
+{
+    int bestDist = 12;
+    int bestNote = noteClass;
+    for (int t : targets)
+    {
+        int dist = std::abs (noteClass - t);
+        if (dist > 6) dist = 12 - dist;
+        if (dist < bestDist)
+        {
+            bestDist = dist;
+            bestNote = t;
+        }
+    }
+    return bestNote;
+}
+
 // ─── transposeGuitar ─────────────────────────────────────────────────────────
 int TransposeEngine::transposeGuitar (int note, const ChordInfo& chord, NTT ntt)
 {
-    // Estratégia Guitar: remapeia as notas do CMaj7 para as notas do acorde alvo
-    // NTT::CHORD  → mapeia para as notas do acorde
-    // NTT::MELODY → mapeia para a escala do acorde
-
     const int noteClass = note % 12;
     const int octave    = note / 12;
 
-    // Determina a posição da nota na fonte (CMaj7 = notas 0,4,7,11)
-    // Encontra o índice da nota-fonte mais próxima
-    int bestSourceIdx  = 0;
-    int bestSourceDist = 12;
-    for (int i = 0; i < 4; ++i)
+    if (ntt == NTT::CHORD)
     {
-        int dist = std::abs (noteClass - SOURCE_CHORD_NOTES[i]);
-        if (dist > 6) dist = 12 - dist; // distância circular
-        if (dist < bestSourceDist)
+        // NTT=CHORD: remapeia grau-a-grau do acorde fonte (CMaj) para o acorde alvo.
+        // Fonte CMaj: root=0(C), 3rd=4(E), 5th=7(G)
+        // Notas que não são chord tones: mantêm o offset relativo ao chord tone mais próximo.
+
+        static const std::vector<int> srcChordTones = { 0, 4, 7 };
+        const auto targetChordTones = chordNotes (chord);
+
+        if (targetChordTones.empty()) return transposeRoot (note, chord);
+
+        // Encontra o chord tone fonte mais próximo e o offset
+        int bestSrcDeg  = 0;
+        int bestSrcDist = 12;
+        for (int d = 0; d < (int)srcChordTones.size(); ++d)
         {
-            bestSourceDist = dist;
-            bestSourceIdx  = i;
+            int dist = noteClass - srcChordTones[d];
+            if (dist < 0) dist += 12;
+            int distAbs = (dist > 6) ? (12 - dist) : dist;
+            if (distAbs < bestSrcDist)
+            {
+                bestSrcDist = distAbs;
+                bestSrcDeg  = d;
+            }
         }
+
+        // Offset da nota em relação ao chord tone fonte mais próximo
+        int offset = noteClass - srcChordTones[bestSrcDeg];
+        if (offset < -6) offset += 12;
+        if (offset >  6) offset -= 12;
+
+        // Mapeia o grau para o acorde alvo (1st→1st, 3rd→3rd, 5th→5th)
+        int targetDeg = bestSrcDeg;
+        if (targetDeg >= (int)targetChordTones.size())
+            targetDeg = (int)targetChordTones.size() - 1;
+
+        int targetClass = (targetChordTones[targetDeg] + offset + 12) % 12;
+        int result = octave * 12 + targetClass;
+
+        while (result > 127) result -= 12;
+        while (result < 0)   result += 12;
+        return result;
     }
+    else // NTT::MELODY
+    {
+        // NTT=MELODY: remapeia grau-a-grau da escala fonte (C Maior) para a escala alvo.
+        // A escala alvo depende do tipo de acorde (maior, menor, mixolídio, etc.)
 
-    // Seleciona as notas alvo
-    std::vector<int> targetNotes = (ntt == NTT::CHORD)
-                                 ? chordNotes (chord)
-                                 : scaleNotes (chord);
+        static const std::vector<int> srcScale = { 0, 2, 4, 5, 7, 9, 11 };
+        const auto targetScale = scaleNotes (chord);
 
-    if (targetNotes.empty()) return transposeRoot (note, chord);
+        if (targetScale.empty()) return transposeRoot (note, chord);
 
-    // Mapeia o índice proporcional para as notas do acorde alvo
-    const int targetSize = (int)targetNotes.size();
-    int targetIdx = (bestSourceIdx * targetSize) / 4;
-    targetIdx = std::clamp (targetIdx, 0, targetSize - 1);
+        // Encontra o grau da escala fonte mais próximo
+        int bestDeg  = 0;
+        int bestDist = 12;
+        for (int d = 0; d < (int)srcScale.size(); ++d)
+        {
+            int dist = std::abs (noteClass - srcScale[d]);
+            if (dist > 6) dist = 12 - dist;
+            if (dist < bestDist)
+            {
+                bestDist = dist;
+                bestDeg  = d;
+            }
+        }
 
-    int targetClass = targetNotes[targetIdx];
-    int result      = octave * 12 + targetClass;
+        // Mapeia grau-a-grau para a escala alvo
+        int targetDeg = bestDeg;
+        if (targetDeg >= (int)targetScale.size())
+            targetDeg = (int)targetScale.size() - 1;
 
-    while (result > 127) result -= 12;
-    while (result < 0)   result += 12;
-    return result;
+        int targetClass = targetScale[targetDeg];
+        int result = octave * 12 + targetClass;
+
+        while (result > 127) result -= 12;
+        while (result < 0)   result += 12;
+        return result;
+    }
 }
 
 // ─── transposeNote ───────────────────────────────────────────────────────────
@@ -147,7 +210,7 @@ int TransposeEngine::transposeNote (int note, const ChordInfo& chord,
                                     NTR ntr, NTT ntt,
                                     int highKey, int lowLimit, int highLimit)
 {
-    if (!chord.valid) return note; // sem acorde detectado: não transpõe
+    if (!chord.valid) return note;
 
     int result = note;
 
@@ -159,10 +222,8 @@ int TransposeEngine::transposeNote (int note, const ChordInfo& chord,
         case NTR::BASS:   result = transposeBass   (note, chord); break;
     }
 
-    // Aplicar highKey: se a nota transposta exceder highKey, oitavar para baixo
     while (result > highKey && result > 0) result -= 12;
 
-    // Aplicar limites do canal
     if (result < lowLimit)  result = lowLimit;
     if (result > highLimit) result = highLimit;
 
