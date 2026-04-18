@@ -84,8 +84,53 @@ bool TransposeEngine::shouldMute (const CasmChannel& casmCh, const ChordInfo& ch
 // ─── transposeRoot ────────────────────────────────────────────────────────────
 int TransposeEngine::transposeRoot (int note, const ChordInfo& chord)
 {
-    // Shift simples: desloca pelo intervalo C → root
+    // 1. Shift por fundamental: desloca pelo intervalo C → root
     int transposed = note + chord.root;
+
+    // 2. Correção de tipo: ajusta a 3ª e 7ª para refletir o tipo do acorde.
+    //    Os STY são gravados em CMaj (3ª maior=4, 7ª maior=11).
+    //    Para acordes menores, flatten a 3ª; para dom7, flatten a 7ª; etc.
+    int degree = ((transposed % 12) - chord.root + 12) % 12;
+
+    bool flatThird  = false;
+    bool flatFifth  = false;
+    bool flatSeventh = false;
+
+    switch (chord.type)
+    {
+        case ChordType::Minor:
+        case ChordType::MinorAdd9:
+            flatThird = true;
+            break;
+        case ChordType::Minor7:
+            flatThird = true;
+            flatSeventh = true;
+            break;
+        case ChordType::Minor7b5:
+            flatThird = true;
+            flatFifth = true;
+            flatSeventh = true;
+            break;
+        case ChordType::Diminished:
+            flatThird = true;
+            flatFifth = true;
+            break;
+        case ChordType::Diminished7:
+            flatThird = true;
+            flatFifth = true;
+            flatSeventh = true; // dim7 = bb7
+            break;
+        case ChordType::Dominant7:
+            flatSeventh = true;
+            break;
+        default:
+            break; // Major, Aug, Sus — sem correção na 3ª/5ª/7ª do CMaj
+    }
+
+    if (flatThird  && degree == 4)  transposed -= 1;  // 3ª maior → 3ª menor
+    if (flatFifth  && degree == 7)  transposed -= 1;  // 5ª justa → 5ª dim
+    if (flatSeventh && degree == 11) transposed -= 1;  // 7ª maior → 7ª menor
+
     while (transposed > 127) transposed -= 12;
     while (transposed < 0)   transposed += 12;
     return transposed;

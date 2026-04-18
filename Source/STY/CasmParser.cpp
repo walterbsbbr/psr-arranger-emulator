@@ -159,17 +159,12 @@ bool CasmParser::parseCtab (const uint8_t* data, size_t size, CasmChannel& ch)
         ch.ntt = static_cast<NTT> (std::min<uint8_t> (data[21], 3));
 
         // Derivar NTR a partir do NTT para SFF1:
-        //   drums        → BYPASS (sem transposição)
-        //   NTT=BYPASS   → BYPASS (sem transposição)
-        //   NTT=MELODY   → GUITAR (remapeia notas dentro da escala alvo)
-        //   NTT=CHORD    → GUITAR (remapeia notas para as notas do acorde alvo)
-        //   NTT=MELODIC_MINOR → BASS (baixo segue a fundamental do acorde)
+        //   drums/NTT=BYPASS → BYPASS (sem transposição)
+        //   NTT=MELODY/CHORD/MELODIC_MINOR → ROOT (shift por fundamental + correção de tipo)
         if (isDrum || ch.ntt == NTT::BYPASS)
             ch.ntr = NTR::BYPASS;
-        else if (ch.ntt == NTT::MELODY || ch.ntt == NTT::CHORD)
-            ch.ntr = NTR::GUITAR;
-        else // NTT::MELODIC_MINOR
-            ch.ntr = NTR::BASS;
+        else
+            ch.ntr = NTR::ROOT;
         // data[22] NÃO é um MIDI note para HighKey (valores 3,6,7 observados).
         // É um indicador de registro/oitava do voice part. Usar 127 para
         // não restringir as notas transpostas via while(note > highKey).
