@@ -125,17 +125,44 @@ void StyleEngine::selectFill (int ab)
 {
     if (!currentSty.valid || state != State::Main) return;
 
-    static const StyleSection fills[] = {
+    // Tentar os fills disponíveis na ordem de preferência.
+    // Diferentes STY files usam diferentes combinações:
+    //   Alguns: AA, AB, BA, BB
+    //   Outros: AA, BB, CC, DD, BA
+    static const StyleSection allFills[] = {
         StyleSection::FillInAA, StyleSection::FillInAB,
-        StyleSection::FillInBA, StyleSection::FillInBB
+        StyleSection::FillInBA, StyleSection::FillInBB,
+        StyleSection::FillInCC, StyleSection::FillInDD,
+        StyleSection::BreakFill
     };
-    const auto sec = fills[std::clamp (ab, 0, 3)];
-    if (!currentSty.hasSection (sec)) return;
 
-    // O fill determina para qual Main retornar:
-    // AA→A(0), AB→B(1), BA→A(0), BB→B(1)
-    static const int fillTargetMain[] = { 0, 1, 0, 1 };
-    activeMainIdx = fillTargetMain[std::clamp (ab, 0, 3)];
+    // Para o botão 0-3, tenta na ordem: a fill solicitada, depois qualquer fill disponível
+    static const StyleSection preferred[4][4] = {
+        { StyleSection::FillInAA, StyleSection::FillInCC, StyleSection::FillInBA, StyleSection::FillInBB },
+        { StyleSection::FillInAB, StyleSection::FillInBB, StyleSection::FillInDD, StyleSection::FillInAA },
+        { StyleSection::FillInBA, StyleSection::FillInAA, StyleSection::FillInCC, StyleSection::FillInBB },
+        { StyleSection::FillInBB, StyleSection::FillInDD, StyleSection::FillInAB, StyleSection::FillInAA },
+    };
+
+    ab = std::clamp (ab, 0, 3);
+    StyleSection sec = StyleSection::Unknown;
+    for (auto candidate : preferred[ab])
+    {
+        if (currentSty.hasSection (candidate))
+        {
+            sec = candidate;
+            break;
+        }
+    }
+    if (sec == StyleSection::Unknown) return;
+
+    // Determinar para qual Main retornar após o fill
+    // Fills "xB" → Main B(1), "xA" → Main A(0), outros → manter o atual
+    if (sec == StyleSection::FillInAB || sec == StyleSection::FillInBB)
+        activeMainIdx = 1;
+    else if (sec == StyleSection::FillInAA || sec == StyleSection::FillInBA)
+        activeMainIdx = 0;
+    // CC, DD, BreakFill → mantém o activeMainIdx atual
 
     state = State::Fill;
     player->queueSection (currentSty.getSection (sec), sec, false);

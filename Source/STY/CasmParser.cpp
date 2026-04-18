@@ -47,10 +47,17 @@ bool CasmParser::parse (const uint8_t* data, size_t size, StyFile& out)
         }
     }
 
-    // Construir mapa rápido sourceChannel → índice
+    // Construir mapa rápido sourceChannel → índice.
+    // Usar a PRIMEIRA entrada por canal (CSEG#0 = Main A/B/C/D/Fills).
+    // CSEGs posteriores (Intro B, Ending B etc.) podem ter NTT=BYPASS
+    // e sobrescreveriam as regras corretas.
     out.casmIndex.fill (-1);
     for (int i = 0; i < (int)out.casmChannels.size(); ++i)
-        out.casmIndex[out.casmChannels[i].sourceChannel] = i;
+    {
+        int srcCh = out.casmChannels[i].sourceChannel;
+        if (out.casmIndex[srcCh] < 0)
+            out.casmIndex[srcCh] = i;
+    }
 
     DBG ("CasmParser: " + juce::String ((int)out.casmChannels.size()) + " canais CASM lidos");
     return true;
@@ -150,8 +157,9 @@ bool CasmParser::parseCtab (const uint8_t* data, size_t size, CasmChannel& ch)
     // Extrair nome da parte (bytes [1-8], 8 chars ASCII, space-padded)
     ch.partName = juce::String ((const char*)(data + 1), 8).trim();
 
-    // Detectar drums: byte [13]=0x07 ou byte [20]=0x01
-    bool isDrum = (data[13] == 0x07) || (size > 20 && data[20] == 0x01);
+    // Detectar drums: SOMENTE byte [13]=0x07.
+    // Byte [20] NÃO é drum flag — Piano/Choir/PedalStl têm [20]=0x01 mas são melódicos.
+    bool isDrum = (data[13] == 0x07);
 
     if (size >= 25)
     {
