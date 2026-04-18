@@ -27,10 +27,8 @@ private:
 
     static constexpr int NUM_PARTS = 8;
     static const char* PART_NAMES[NUM_PARTS];
-    // Canais FluidSynth correspondentes a cada part (0-indexed)
-    // Part 0=Sub-Rhy(ch7), 1=Rhythm(ch8), 2=Bass(ch10), 3=Chord1(ch11),
-    // 4=Chord2(ch12), 5=Pad(ch13), 6=Phr1(ch14), 7=Phr2(ch15)
-    static const int PART_FS_CHANNEL[NUM_PARTS];
+    // Canais FluidSynth 0-indexed: parts 0-7 → canais 8-15 (JUCE 9-16)
+    static constexpr int FIRST_STYLE_CH = 8; // 0-indexed
 
     juce::Slider     sliderVol[NUM_PARTS];
     juce::TextButton btnMute[NUM_PARTS];

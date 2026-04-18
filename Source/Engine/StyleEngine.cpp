@@ -229,6 +229,10 @@ void StyleEngine::onMidiFromStyle (const juce::MidiMessage& rawMsg)
     const int sourceCh = rawMsg.getChannel() - 1; // 0-indexed (0-15)
     if (sourceCh < 0 || sourceCh > 15) return;
 
+    // Verificar mute da parte (partIdx 0-7 para canais 8-15)
+    const int partIdx = sourceCh - 8;
+    if (partIdx >= 0 && partIdx < 8 && partMuted[partIdx]) return;
+
     // ── CC, PC, SysEx: enviar diretamente sem modificação ────────────────────
     if (!rawMsg.isNoteOn() && !rawMsg.isNoteOff())
     {
@@ -259,6 +263,11 @@ void StyleEngine::onMidiFromStyle (const juce::MidiMessage& rawMsg)
 
     if (!synthEngine.isDrumBank (sourceCh))
     {
+        // Correção de oitava para canais de Baixo (GM PC 32-39).
+        // Os padrões STY gravam o baixo em registro muito grave.
+        int pc = synthEngine.getChannelProgram (sourceCh);
+        if (pc >= 32 && pc <= 39)
+            note += 24;
 
         ChordInfo chord;
         {

@@ -1,21 +1,7 @@
 #include "MixerPanel.h"
 
 const char* MixerPanel::PART_NAMES[NUM_PARTS] = {
-    "Sub-Rhy", "Rhythm", "Bass", "Chord1", "Chord2", "Pad", "Phr1", "Phr2"
-};
-
-// Mapeamento Part → canal FluidSynth (0-indexed).
-// Segue convenção PSR: channels 7-15 raw = JUCE 8-16.
-// Part 0 = Sub-Rhy (ch7), Part 1 = Rhythm (ch8), Part 2 = Bass (ch10), etc.
-const int MixerPanel::PART_FS_CHANNEL[NUM_PARTS] = {
-    7,   // Sub-Rhy  → raw ch 7  (JUCE ch 8)
-    8,   // Rhythm   → raw ch 8  (JUCE ch 9)  [drums]
-    10,  // Bass     → raw ch 10 (JUCE ch 11)
-    11,  // Chord1   → raw ch 11 (JUCE ch 12)
-    12,  // Chord2   → raw ch 12 (JUCE ch 13)
-    13,  // Pad      → raw ch 13 (JUCE ch 14)
-    14,  // Phr1     → raw ch 14 (JUCE ch 15)
-    15,  // Phr2     → raw ch 15 (JUCE ch 16)
+    "Ch 9", "Ch 10", "Ch 11", "Ch 12", "Ch 13", "Ch 14", "Ch 15", "Ch 16"
 };
 
 MixerPanel::MixerPanel (StyleEngine& engine) : styleEngine (engine)
@@ -54,7 +40,7 @@ MixerPanel::MixerPanel (StyleEngine& engine) : styleEngine (engine)
         addAndMakeVisible (btnMute[i]);
     }
 
-    startTimer (500); // atualiza nomes dos instrumentos a cada 500ms
+    startTimer (500);
 }
 
 void MixerPanel::timerCallback()
@@ -62,7 +48,7 @@ void MixerPanel::timerCallback()
     auto& synth = styleEngine.getSynthEngine();
     for (int i = 0; i < NUM_PARTS; ++i)
     {
-        int ch = PART_FS_CHANNEL[i];
+        int ch = FIRST_STYLE_CH + i; // canais 8-15 (0-indexed)
         auto name = synth.getChannelPresetName (ch);
         if (name.isEmpty())
             name = "---";
