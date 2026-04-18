@@ -181,6 +181,18 @@ void FluidSynthEngine::applyProgramChange (int ch)
         fluid_synth_bank_select (synth, ch, 128); // GM percussion bank
 }
 
+juce::String FluidSynthEngine::getChannelPresetName (int ch) const
+{
+    juce::ScopedLock sl (synthLock);
+    if (synth == nullptr || ch < 0 || ch > 15) return {};
+
+    fluid_preset_t* preset = fluid_synth_get_channel_preset (synth, ch);
+    if (preset == nullptr) return {};
+
+    const char* name = fluid_preset_get_name (preset);
+    return name ? juce::String (name) : juce::String ("PC " + juce::String (programNum[ch]));
+}
+
 void FluidSynthEngine::allNotesOff()
 {
     juce::ScopedLock sl (synthLock);

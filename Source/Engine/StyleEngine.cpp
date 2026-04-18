@@ -259,6 +259,11 @@ void StyleEngine::onMidiFromStyle (const juce::MidiMessage& rawMsg)
     // Transpor para o acorde da mão esquerda (exceto bateria)
     if (!isDrumChannel (sourceCh))
     {
+        // Correção de oitava para o Baixo (raw ch 10 = JUCE ch 11).
+        // Os padrões STY gravam o baixo 2 oitavas abaixo da tessitura real.
+        if (sourceCh == 10)
+            note += 24;
+
         ChordInfo chord;
         {
             juce::ScopedLock sl (chordLock);

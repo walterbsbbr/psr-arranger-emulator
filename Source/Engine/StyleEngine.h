@@ -71,6 +71,7 @@ public:
 
     State getState() const noexcept { return state; }
     int   getActiveMainIndex() const noexcept { return activeMainIdx; }
+    FluidSynthEngine& getSynthEngine() noexcept { return synthEngine; }
 
 private:
     void onMidiFromStyle  (const juce::MidiMessage& rawMsg);

@@ -45,6 +45,12 @@ public:
 
     double getSampleRate() const noexcept { return currentSampleRate; }
 
+    /** Retorna o nome do preset carregado num canal (0-indexed), ou "" se vazio */
+    juce::String getChannelPresetName (int ch) const;
+
+    /** Retorna o número de programa ativo num canal (0-indexed) */
+    int getChannelProgram (int ch) const noexcept { return programNum[ch]; }
+
 private:
     void applyProgramChange (int channel); // 0-indexed
 
