@@ -1,0 +1,49 @@
+# Environment / secrets
+.env
+.env.*
+
+# Build directories
+build/
+cmake-build-*/
+out/
+
+# CMake
+CMakeCache.txt
+CMakeFiles/
+cmake_install.cmake
+Makefile
+
+# JUCE
+.vs/
+*.user
+*.suo
+JuceLibraryCode/
+
+# IDEs
+.idea/
+.vscode/
+*.xcodeproj/
+*.xcworkspace/
+
+# macOS
+.DS_Store
+*.dSYM/
+
+# Binary outputs
+*.o
+*.a
+*.dylib
+*.dll
+*.so
+*.exe
+*.app/
+
+# SoundFont files (too large for git)
+*.sf2
+*.sf3
+
+# STY style files (user content)
+*.sty
+
+# Logs
+*.log
