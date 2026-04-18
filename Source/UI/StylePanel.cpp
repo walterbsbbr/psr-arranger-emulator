@@ -117,11 +117,12 @@ void StylePanel::paint (juce::Graphics& g)
 
 void StylePanel::timerCallback()
 {
-    // Ilumina o botão Main ativo
+    // Ilumina apenas o botão Main da variação ativa
     const auto state = styleEngine.getState();
+    const int  activeMain = styleEngine.getActiveMainIndex();
     for (int i = 0; i < 4; ++i)
     {
-        bool isActive = (state == StyleEngine::State::Main);
+        bool isActive = (state == StyleEngine::State::Main && i == activeMain);
         btnMain[i].setColour (juce::TextButton::buttonColourId,
                               isActive ? juce::Colour (0xff005500)
                                        : juce::Colour (0xff2a2a3e));

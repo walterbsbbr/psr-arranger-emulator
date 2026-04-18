@@ -70,6 +70,7 @@ public:
     bool    isPartMuted   (int destCh) const noexcept  { return partMuted[destCh];  }
 
     State getState() const noexcept { return state; }
+    int   getActiveMainIndex() const noexcept { return activeMainIdx; }
 
 private:
     void onMidiFromStyle  (const juce::MidiMessage& rawMsg);
