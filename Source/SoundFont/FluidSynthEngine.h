@@ -51,6 +51,9 @@ public:
     /** Retorna o número de programa ativo num canal (0-indexed) */
     int getChannelProgram (int ch) const noexcept { return programNum[ch]; }
 
+    /** Retorna true se o canal foi configurado como drum bank (MSB=127) */
+    bool isDrumBank (int ch) const noexcept { return ch >= 0 && ch < 16 && bankMsb[ch] == 127; }
+
 private:
     void applyProgramChange (int channel); // 0-indexed
 

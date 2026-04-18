@@ -154,31 +154,30 @@ void FluidSynthEngine::sendMidiMessage (const juce::MidiMessage& msg)
 
 void FluidSynthEngine::applyProgramChange (int ch)
 {
-    // Lógica de fallback: tenta MSB/LSB como está; se falhar, tenta GM (0/0)
     int msb = bankMsb[ch];
     int lsb = bankLsb[ch];
     int pc  = programNum[ch];
 
-    // Bancos Yamaha XG/Mega Voice (MSB > 0) podem não existir no SF2 GM
-    // Tentativa 1: banco original
-    int result = fluid_synth_bank_select      (synth, ch, msb * 128 + lsb);
-    result     = fluid_synth_program_change   (synth, ch, pc);
+    // Yamaha XG: MSB=127 = drum bank. FluidSynth usa bank 128 para GM drums.
+    // Canal 10 GM (0-idx 9) também é sempre bateria.
+    if (msb == 127 || ch == 9)
+    {
+        fluid_synth_bank_select    (synth, ch, 128);
+        fluid_synth_program_change (synth, ch, pc);
+        return;
+    }
 
-    // Se FluidSynth não encontrou a voz (preset inválido), verifica
+    // Canais melódicos: tenta o banco XG original (MSB*128+LSB)
+    fluid_synth_bank_select    (synth, ch, msb * 128 + lsb);
+    fluid_synth_program_change (synth, ch, pc);
+
+    // Se o banco XG não existe no SF2 GM, faz fallback para bank 0
     fluid_preset_t* preset = fluid_synth_get_channel_preset (synth, ch);
     if (preset == nullptr && (msb != 0 || lsb != 0))
     {
-        // Fallback para GM padrão
-        DBG ("FluidSynth: fallback GM para ch=" + juce::String(ch+1)
-             + " pc=" + juce::String(pc)
-             + " (banco " + juce::String(msb) + "/" + juce::String(lsb) + " nao encontrado)");
         fluid_synth_bank_select    (synth, ch, 0);
         fluid_synth_program_change (synth, ch, pc);
     }
-
-    // Canal 10 (index 9) é sempre bateria no GM
-    if (ch == 9)
-        fluid_synth_bank_select (synth, ch, 128); // GM percussion bank
 }
 
 juce::String FluidSynthEngine::getChannelPresetName (int ch) const

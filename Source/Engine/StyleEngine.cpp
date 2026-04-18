@@ -221,12 +221,7 @@ void StyleEngine::setPartMuted (int destCh, bool mute)
     }
 }
 
-// ─── isDrumChannel ────────────────────────────────────────────────────────────
-// Canal 10 GM (0-indexed=9) é sempre bateria — sem transposição.
-static bool isDrumChannel (int ch0)
-{
-    return ch0 == 9;
-}
+// isDrumChannel removido — agora usa synthEngine.isDrumBank(ch) dinâmicamente
 
 // ─── onMidiFromStyle ─────────────────────────────────────────────────────────
 void StyleEngine::onMidiFromStyle (const juce::MidiMessage& rawMsg)
@@ -262,7 +257,7 @@ void StyleEngine::onMidiFromStyle (const juce::MidiMessage& rawMsg)
     // NOTE ON: transpor e salvar o mapeamento
     int note = origNote;
 
-    if (!isDrumChannel (sourceCh))
+    if (!synthEngine.isDrumBank (sourceCh))
     {
 
         ChordInfo chord;
