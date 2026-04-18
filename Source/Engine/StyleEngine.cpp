@@ -6,6 +6,8 @@ StyleEngine::StyleEngine (FluidSynthEngine& synth, MidiRouter& router)
 {
     partVolume.fill (100);
     partMuted.fill  (false);
+    for (auto& ch : noteMap)
+        ch.fill (-1);
 
     // Cria o LoopPlayer com callback que recebe mensagens brutas do STY
     player = std::make_unique<LoopPlayer> ([this] (const juce::MidiMessage& msg) {
@@ -88,6 +90,7 @@ void StyleEngine::stop()
 {
     player->stop();
     synthEngine.allNotesOff();
+    for (auto& ch : noteMap) ch.fill (-1);
     state = State::Idle;
 }
 
@@ -219,31 +222,17 @@ void StyleEngine::setPartMuted (int destCh, bool mute)
 }
 
 // ─── isDrumChannel ────────────────────────────────────────────────────────────
-// Canais de bateria/percussão: não sofrem transposição.
-// No padrão PSR: Rhythm1 e Rhythm2 (geralmente raw ch 8,9 = JUCE ch 9,10)
-// Convenção GM: canal 10 (JUCE 10, 0-idx 9) é bateria.
+// Canal 10 GM (0-indexed=9) é sempre bateria — sem transposição.
 static bool isDrumChannel (int ch0)
 {
-    // Aceita canal 9 (GM drums) e canal 8 (Rhythm1 em muitos STY)
-    return ch0 == 8 || ch0 == 9;
+    return ch0 == 9;
 }
 
 // ─── onMidiFromStyle ─────────────────────────────────────────────────────────
-// Chamado do HighResolutionTimer thread pelo LoopPlayer.
-// Segue a arquitetura real do PSR:
-//   - Canais de bateria/percussão: passam direto, sem transposição
-//   - Canais melódicos: transpõem pela fundamental do acorde + correção de tipo
-//   - CC/PC/SysEx: passam direto para manter o timbre correto
 void StyleEngine::onMidiFromStyle (const juce::MidiMessage& rawMsg)
 {
     const int sourceCh = rawMsg.getChannel() - 1; // 0-indexed (0-15)
-
-    // Apenas canais do acompanhamento (raw 7-15 = JUCE 8-16)
-    if (sourceCh < 7 || sourceCh > 15) return;
-
-    // Verificar mute da parte (partIdx 0-7 para canais 8-15)
-    const int partIdx = sourceCh - 8;
-    if (partIdx >= 0 && partIdx < 8 && partMuted[partIdx]) return;
+    if (sourceCh < 0 || sourceCh > 15) return;
 
     // ── CC, PC, SysEx: enviar diretamente sem modificação ────────────────────
     if (!rawMsg.isNoteOn() && !rawMsg.isNoteOff())
@@ -254,15 +243,27 @@ void StyleEngine::onMidiFromStyle (const juce::MidiMessage& rawMsg)
     }
 
     // ── Note On/Off ──────────────────────────────────────────────────────────
-    int note = rawMsg.getNoteNumber();
+    const int origNote = rawMsg.getNoteNumber();
 
-    // Transpor para o acorde da mão esquerda (exceto bateria)
+    if (rawMsg.isNoteOff() || (rawMsg.isNoteOn() && rawMsg.getVelocity() == 0))
+    {
+        // NOTE OFF: usar a nota transposta que foi salva no Note On correspondente.
+        // Isso evita notas presas quando o acorde muda entre Note On e Note Off.
+        const int saved = noteMap[sourceCh][origNote];
+        if (saved >= 0)
+        {
+            auto msg = juce::MidiMessage::noteOff (sourceCh + 1, saved);
+            synthEngine.sendMidiMessage (msg);
+            noteMap[sourceCh][origNote] = -1;
+        }
+        return;
+    }
+
+    // NOTE ON: transpor e salvar o mapeamento
+    int note = origNote;
+
     if (!isDrumChannel (sourceCh))
     {
-        // Correção de oitava para o Baixo (raw ch 10 = JUCE ch 11).
-        // Os padrões STY gravam o baixo 2 oitavas abaixo da tessitura real.
-        if (sourceCh == 10)
-            note += 24;
 
         ChordInfo chord;
         {
@@ -271,21 +272,16 @@ void StyleEngine::onMidiFromStyle (const juce::MidiMessage& rawMsg)
         }
 
         if (chord.valid)
-        {
-            // Transposição ROOT + correção de tipo (3ª/5ª/7ª)
             note = TransposeEngine::transposeRoot (note, chord);
-        }
 
-        // Transpose global (slider UI)
         note += transposeOffset;
     }
 
     note = std::clamp (note, 0, 127);
 
-    // Enviar no canal ORIGINAL (mantém o mapeamento de instrumentos do SInt)
-    auto msg = rawMsg.isNoteOn()
-        ? juce::MidiMessage::noteOn  (sourceCh + 1, note, rawMsg.getVelocity())
-        : juce::MidiMessage::noteOff (sourceCh + 1, note);
+    // Salvar o mapeamento origNote→transposedNote para o Note Off futuro
+    noteMap[sourceCh][origNote] = note;
 
+    auto msg = juce::MidiMessage::noteOn (sourceCh + 1, note, rawMsg.getVelocity());
     synthEngine.sendMidiMessage (msg);
 }

@@ -94,6 +94,11 @@ private:
     std::array<uint8_t, 8> partVolume {};
     std::array<bool,    8> partMuted  {};
 
+    // Rastreamento de notas ativas para evitar notas presas na mudança de acorde.
+    // noteMap[ch][originalNote] = transposedNote que foi enviado no Note On.
+    // No Note Off, usamos o valor salvo (não re-transpomos).
+    std::array<std::array<int, 128>, 16> noteMap {};  // -1 = sem nota ativa
+
     // Último acorde detectado (atualizado do message thread)
     juce::CriticalSection chordLock;
 
