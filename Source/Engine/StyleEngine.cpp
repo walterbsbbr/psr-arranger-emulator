@@ -38,14 +38,16 @@ bool StyleEngine::loadStyle (const juce::File& styFile)
     currentBpm = currentSty.defaultBpm;
     player->prepareToPlay (currentBpm, currentSty.ppq, synthEngine.getSampleRate());
 
-    // Envia a inicialização do SInt (Program Changes, SysEx) para o FluidSynth
+    // Envia a inicialização do SInt (Program Changes, SysEx) direto para o FluidSynth.
+    // Os eventos do SInt configuram os instrumentos nos canais do acompanhamento.
+    // Enviar direto evita duplicação de bank select no MidiRouter.
     if (currentSty.hasSection (StyleSection::SInt))
     {
         const auto& sintEvents = currentSty.getSection (StyleSection::SInt).events;
         for (int i = 0; i < sintEvents.getNumEvents(); ++i)
         {
-            auto msg = sintEvents.getEventPointer(i)->message;
-            midiRouter.routeStyleMessage (msg);
+            const auto& msg = sintEvents.getEventPointer(i)->message;
+            synthEngine.sendMidiMessage (msg);
         }
     }
 
@@ -216,85 +218,69 @@ void StyleEngine::setPartMuted (int destCh, bool mute)
     }
 }
 
-// ─── resolveDestChannel ───────────────────────────────────────────────────────
-int StyleEngine::resolveDestChannel (int sourceCh) const
+// ─── isDrumChannel ────────────────────────────────────────────────────────────
+// Canais de bateria/percussão: não sofrem transposição.
+// No padrão PSR: Rhythm1 e Rhythm2 (geralmente raw ch 8,9 = JUCE ch 9,10)
+// Convenção GM: canal 10 (JUCE 10, 0-idx 9) é bateria.
+static bool isDrumChannel (int ch0)
 {
-    // Se há mapeamento CASM, usa-o
-    if (!currentSty.casmChannels.empty() && sourceCh >= 0 && sourceCh < 16)
-    {
-        const int idx = currentSty.casmIndex[sourceCh];
-        if (idx >= 0)
-            return currentSty.casmChannels[idx].destChannel; // 8-15
-    }
-
-    // Fallback SFF1: canais 8-15 mapeiam diretamente para destino 8-15
-    if (sourceCh >= 8 && sourceCh <= 15)
-        return sourceCh;
-
-    return -1; // não mapeado
+    // Aceita canal 9 (GM drums) e canal 8 (Rhythm1 em muitos STY)
+    return ch0 == 8 || ch0 == 9;
 }
 
 // ─── onMidiFromStyle ─────────────────────────────────────────────────────────
-// Chamado do HighResolutionTimer thread pelo LoopPlayer
+// Chamado do HighResolutionTimer thread pelo LoopPlayer.
+// Segue a arquitetura real do PSR:
+//   - Canais de bateria/percussão: passam direto, sem transposição
+//   - Canais melódicos: transpõem pela fundamental do acorde + correção de tipo
+//   - CC/PC/SysEx: passam direto para manter o timbre correto
 void StyleEngine::onMidiFromStyle (const juce::MidiMessage& rawMsg)
 {
-    const int sourceCh = rawMsg.getChannel() - 1; // 0-indexed
-    const int destCh   = resolveDestChannel (sourceCh);
+    const int sourceCh = rawMsg.getChannel() - 1; // 0-indexed (0-15)
 
-    if (destCh < 0) return; // canal sem mapeamento
+    // Apenas canais do acompanhamento (raw 7-15 = JUCE 8-16)
+    if (sourceCh < 7 || sourceCh > 15) return;
 
-    // Verificar mute da parte
-    const int partIdx = destCh - 8; // 0-7
+    // Verificar mute da parte (partIdx 0-7 para canais 8-15)
+    const int partIdx = sourceCh - 8;
     if (partIdx >= 0 && partIdx < 8 && partMuted[partIdx]) return;
 
-    // Obter regras CASM do canal de origem
-    const int casmIdx = (sourceCh >= 0 && sourceCh < 16)
-                      ? currentSty.casmIndex[sourceCh] : -1;
-
-    // Clonar a mensagem para modificar
-    juce::MidiMessage msg = rawMsg;
-
-    // Redirecionar para o canal de destino (1-indexed para JUCE)
-    // NOTA: modificamos apenas note on/off; CC e PC mantêm o canal original
-    // para que o FluidSynthEngine aplique os instrumentos corretos
-
-    if (msg.isNoteOn() || msg.isNoteOff())
+    // ── CC, PC, SysEx: enviar diretamente sem modificação ────────────────────
+    if (!rawMsg.isNoteOn() && !rawMsg.isNoteOff())
     {
-        // Transpor: usa regras CASM se disponível
+        // Enviar no canal original para que o FluidSynth mantenha o timbre
+        synthEngine.sendMidiMessage (rawMsg);
+        return;
+    }
+
+    // ── Note On/Off ──────────────────────────────────────────────────────────
+    int note = rawMsg.getNoteNumber();
+
+    // Transpor para o acorde da mão esquerda (exceto bateria)
+    if (!isDrumChannel (sourceCh))
+    {
         ChordInfo chord;
         {
             juce::ScopedLock sl (chordLock);
             chord = currentChord;
         }
 
-        // Aplicar transpose global
-        if (transposeOffset != 0 && (msg.isNoteOn() || msg.isNoteOff()))
+        if (chord.valid)
         {
-            int note = msg.getNoteNumber() + transposeOffset;
-            note = std::clamp (note, 0, 127);
-            msg = msg.isNoteOn()
-                ? juce::MidiMessage::noteOn  (msg.getChannel(), note, msg.getVelocity())
-                : juce::MidiMessage::noteOff (msg.getChannel(), note);
+            // Transposição ROOT + correção de tipo (3ª/5ª/7ª)
+            note = TransposeEngine::transposeRoot (note, chord);
         }
 
-        if (casmIdx >= 0 && chord.valid)
-        {
-            const auto& casmCh = currentSty.casmChannels[casmIdx];
-            bool allowed = TransposeEngine::transposeMidiMessage (msg, chord, casmCh);
-            if (!allowed) return;
-        }
+        // Transpose global (slider UI)
+        note += transposeOffset;
+    }
 
-        // Redirecionar para canal de destino
-        msg = msg.isNoteOn()
-            ? juce::MidiMessage::noteOn  (destCh + 1, msg.getNoteNumber(), msg.getVelocity())
-            : juce::MidiMessage::noteOff (destCh + 1, msg.getNoteNumber());
-    }
-    else
-    {
-        // CC, PC, SysEx: delegar ao MidiRouter para tratamento de bank fallback
-        midiRouter.routeStyleMessage (rawMsg);
-        return;
-    }
+    note = std::clamp (note, 0, 127);
+
+    // Enviar no canal ORIGINAL (mantém o mapeamento de instrumentos do SInt)
+    auto msg = rawMsg.isNoteOn()
+        ? juce::MidiMessage::noteOn  (sourceCh + 1, note, rawMsg.getVelocity())
+        : juce::MidiMessage::noteOff (sourceCh + 1, note);
 
     synthEngine.sendMidiMessage (msg);
 }

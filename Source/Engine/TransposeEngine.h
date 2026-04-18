@@ -59,9 +59,10 @@ public:
      */
     static bool shouldMute (const CasmChannel& casmCh, const ChordInfo& chord);
 
-private:
-    // ── Implementações de cada NTR ───────────────────────────────────────────
+    // ── Transposição por fundamental + correção de tipo ─────────────────────
     static int transposeRoot   (int note, const ChordInfo& chord);
+
+private:
     static int transposeGuitar (int note, const ChordInfo& chord, NTT ntt);
     static int transposeBass   (int note, const ChordInfo& chord);
 

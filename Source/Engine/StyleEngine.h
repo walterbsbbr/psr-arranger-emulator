@@ -77,10 +77,6 @@ private:
     void onSectionEnded   (StyleSection which);
     void transitionToMain (int idx);
 
-    // Mapeia canal de origem para canal de destino via CASM
-    // Retorna -1 se o canal não deve ser reproduzido
-    int resolveDestChannel (int sourceCh) const;
-
     FluidSynthEngine& synthEngine;
     MidiRouter&       midiRouter;
 
