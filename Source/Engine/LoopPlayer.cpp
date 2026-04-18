@@ -89,13 +89,18 @@ void LoopPlayer::hiResTimerCallback()
     if (lastCallNs == 0) { lastCallNs = nowNs; return; }
 
     const int64_t elapsedNs = nowNs - lastCallNs;
-    lastCallNs = nowNs;
 
     // Quantos ticks se passaram neste intervalo?
     const int ticksElapsed = (nsPerTick > 0)
                            ? (int)(elapsedNs / nsPerTick)
                            : 0;
     if (ticksElapsed <= 0) return;
+
+    // Consumir apenas os ns correspondentes aos ticks avançados,
+    // preservando o restante para a próxima chamada.
+    // Sem isso, a divisão inteira perde o tempo fracionário e o playhead
+    // nunca avança quando nsPerTick > 1ms (ex: 120 BPM / 480 PPQ).
+    lastCallNs += (int64_t)(ticksElapsed * nsPerTick);
 
     // Avança o playhead e dispara os eventos do intervalo
     const int startTick  = playheadTick;
