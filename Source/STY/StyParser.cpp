@@ -113,7 +113,7 @@ void StyParser::extractSections (const juce::MidiMessageSequence& track, StyFile
         // Marker events: meta type 0x06
         if (msg.getMetaEventType() == 6)
         {
-            std::string text (msg.getMetaEventData().data(),
+            std::string text ((const char*)msg.getMetaEventData(),
                               (size_t)msg.getMetaEventLength());
             StyleSection sec = sectionFromMarker (text);
             if (sec != StyleSection::Unknown)

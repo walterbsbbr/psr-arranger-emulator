@@ -136,7 +136,7 @@ void FluidSynthEngine::sendMidiMessage (const juce::MidiMessage& msg)
     {
         fluid_synth_key_pressure (synth, ch,
                                   msg.getNoteNumber(),
-                                  msg.getAftertouchValue());
+                                  msg.getAfterTouchValue());
     }
     else if (msg.isSysEx())
     {

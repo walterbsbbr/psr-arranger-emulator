@@ -5,6 +5,7 @@
 #include "LoopPlayer.h"
 #include "TransposeEngine.h"
 #include "ChordDetector.h"
+#include "MidiRouter.h"
 #include "../SoundFont/FluidSynthEngine.h"
 #include <atomic>
 
