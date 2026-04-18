@@ -122,33 +122,58 @@ bool CasmParser::parseCtb2 (const uint8_t* data, size_t size, CasmChannel& ch)
 }
 
 // ─── Ctab (SFF1) ─────────────────────────────────────────────────────────────
-// Layout real observado nos bytes raw de STY Yamaha SFF1 (mínimo 18 bytes):
+// Layout real de 27 bytes (confirmado via dump hex de ROCK01.STY e outros):
 //  [0]      SourceChannel (nibble baixo, 0-7 → canais de estilo 9-16)
-//  [1-8]    Nome da parte (8 bytes ASCII, pode ter null-padding)
+//  [1-8]    Nome da parte (8 bytes ASCII, space-padded)
 //  [9]      DestChannel (nibble baixo, 0-15)
-//  [10]     Flags / TactRange
-//  [11]     HighKey (nota MIDI máxima desta entrada no split do teclado)
-//  [12]     NTR: 0=ROOT, 1=GUITAR, 2=BASS, 3=BYPASS; 7=BYPASS (bateria); 0xFF→BYPASS
-//  [13]     NTT (bits 2-0) + RetrigRule (bits 7-3)
-//  [14]     NoteLowLimit
-//  [15]     NoteHighLimit
-//  [16-17]  MuteFlags (big-endian 16-bit, um bit por tipo de acorde)
+//  [10]     Source chord root / key editable
+//  [11]     Source chord type editable
+//  [12]     Source bass note editable (0xFF = não aplicável)
+//  [13]     Channel type: 0x03=melodic, 0x07=drum → mapeia para NTR
+//  [14-17]  Reserved / extended chord mask (geralmente FF FF FF FF)
+//  [18]     Unknown / flag
+//  [19]     Unknown (sempre 0x02 nos arquivos testados)
+//  [20]     Drum flag: 0x01=drum(bypass), 0x00=melodic
+//  [21]     NTT: 0=BYPASS, 1=MELODY, 2=CHORD, 3=MELODIC_MINOR
+//  [22]     HighKey / voice octave control
+//  [23]     NoteLowLimit
+//  [24]     NoteHighLimit (0x7F=127)
+//  [25]     RetrigRule
+//  [26]     Unknown / padding
 bool CasmParser::parseCtab (const uint8_t* data, size_t size, CasmChannel& ch)
 {
-    if (size < 18) return false;
+    if (size < 20) return false;
 
     ch.sourceChannel = data[0] & 0x0F;
-    // data[1..8] = nome da parte (ignorado na reprodução)
+    // data[1..8] = nome da parte (ignorado)
     ch.destChannel   = data[9] & 0x0F;
-    // data[10]   = flags / tact range (ignorado)
-    ch.highKey       = data[11];
-    uint8_t rawNtr   = data[12];
-    ch.ntr           = static_cast<NTR> (rawNtr > 3 ? 3 : rawNtr);  // 7/0xFF (bateria) → BYPASS(3)
-    ch.ntt           = static_cast<NTT> (data[13] & 0x03);
-    ch.rTag          = (data[13] >> 2) & 0x3F;
-    ch.noteLowLimit  = data[14];
-    ch.noteHighLimit = data[15];
-    ch.muteFlags     = readBE16 (data + 16);
+
+    // NTR: [13]=0x07 → drums (BYPASS), [13]=0x03 → melodic
+    // Também verificar [20]: 0x01 = drum
+    bool isDrum = (data[13] == 0x07) || (size > 20 && data[20] == 0x01);
+    ch.ntr = isDrum ? NTR::BYPASS : NTR::ROOT;
+
+    // NTT e campos restantes dependem do tamanho
+    if (size >= 25)
+    {
+        // Layout completo de 27 bytes
+        ch.ntt           = static_cast<NTT> (std::min<uint8_t> (data[21], 3));
+        ch.highKey       = data[22];
+        ch.noteLowLimit  = data[23];
+        ch.noteHighLimit = data[24];
+        ch.rTag          = (size >= 26) ? data[25] : 0;
+        ch.muteFlags     = 0; // SFF1 Ctab não tem muteFlags inline; default = sem mute
+    }
+    else
+    {
+        // Layout curto (fallback para arquivos com Ctab menor)
+        ch.ntt           = NTT::BYPASS;
+        ch.highKey       = 127;
+        ch.noteLowLimit  = 0;
+        ch.noteHighLimit = 127;
+        ch.rTag          = 0;
+        ch.muteFlags     = 0;
+    }
 
     return true;
 }

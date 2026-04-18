@@ -17,7 +17,20 @@ StyFile StyParser::parse (const juce::File& styFile)
     }
 
     // ── 1. Ler bloco MIDI com juce::MidiFile ────────────────────────────────
-    juce::MemoryInputStream mis (rawData, false);
+    // STY = MIDI SMF + blocos extras (CASM, OTS, MDB) após o End of Track.
+    // JUCE MidiFile::readFrom() exige que TODOS os bytes do stream sejam consumidos
+    // (retorna false se sobrar dados). Precisamos truncar o stream para conter
+    // apenas a porção MIDI (MThd + MTrk).
+    const auto* rawPtr = reinterpret_cast<const uint8_t*> (rawData.getData());
+    int64_t midiEndOffset = findEndOfTrackOffset (rawPtr, (int64_t)rawData.getSize());
+    if (midiEndOffset <= 0)
+    {
+        DBG ("StyParser: nao encontrou MThd/MTrk em " + styFile.getFileName());
+        return out;
+    }
+
+    juce::MemoryBlock midiOnlyData (rawPtr, (size_t)midiEndOffset);
+    juce::MemoryInputStream mis (midiOnlyData, false);
     juce::MidiFile midiFile;
 
     if (!midiFile.readFrom (mis))
