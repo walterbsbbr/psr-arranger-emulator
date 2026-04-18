@@ -32,7 +32,7 @@ bool CasmParser::parse (const uint8_t* data, size_t size, StyFile& out)
 
     while (p + 8 <= end)
     {
-        if (std::memcmp (p, "Cseg", 4) == 0)
+        if (std::memcmp (p, "Cseg", 4) == 0 || std::memcmp (p, "CSEG", 4) == 0)  // SFF2=Cseg, SFF1=CSEG
         {
             uint32_t csegLen = readBE32 (p + 4);
             if (!parseCseg (p + 8, csegLen, out))
@@ -122,28 +122,33 @@ bool CasmParser::parseCtb2 (const uint8_t* data, size_t size, CasmChannel& ch)
 }
 
 // ─── Ctab (SFF1) ─────────────────────────────────────────────────────────────
-// Layout do bloco Ctab (mínimo 8 bytes):
-//  [0] SourceChannel
-//  [1] DestChannel
-//  [2] NTR
-//  [3] NTT (high nibble) + RTag (low nibble)
-//  [4] HighKey
-//  [5] NoteLowLimit
-//  [6] NoteHighLimit
-//  [7] MuteFlags (8-bit, simplificado no SFF1)
+// Layout real observado nos bytes raw de STY Yamaha SFF1 (mínimo 18 bytes):
+//  [0]      SourceChannel (nibble baixo, 0-7 → canais de estilo 9-16)
+//  [1-8]    Nome da parte (8 bytes ASCII, pode ter null-padding)
+//  [9]      DestChannel (nibble baixo, 0-15)
+//  [10]     Flags / TactRange
+//  [11]     HighKey (nota MIDI máxima desta entrada no split do teclado)
+//  [12]     NTR: 0=ROOT, 1=GUITAR, 2=BASS, 3=BYPASS; 7=BYPASS (bateria); 0xFF→BYPASS
+//  [13]     NTT (bits 2-0) + RetrigRule (bits 7-3)
+//  [14]     NoteLowLimit
+//  [15]     NoteHighLimit
+//  [16-17]  MuteFlags (big-endian 16-bit, um bit por tipo de acorde)
 bool CasmParser::parseCtab (const uint8_t* data, size_t size, CasmChannel& ch)
 {
-    if (size < 8) return false;
+    if (size < 18) return false;
 
     ch.sourceChannel = data[0] & 0x0F;
-    ch.destChannel   = data[1] & 0x0F;
-    ch.ntr           = static_cast<NTR>  ((data[2] >> 4) & 0x03);
-    ch.ntt           = static_cast<NTT>  ( data[3]       & 0x03);
-    ch.rTag          = (data[3] >> 4) & 0x0F;
-    ch.highKey       = data[4];
-    ch.noteLowLimit  = data[5];
-    ch.noteHighLimit = data[6];
-    ch.muteFlags     = data[7];
+    // data[1..8] = nome da parte (ignorado na reprodução)
+    ch.destChannel   = data[9] & 0x0F;
+    // data[10]   = flags / tact range (ignorado)
+    ch.highKey       = data[11];
+    uint8_t rawNtr   = data[12];
+    ch.ntr           = static_cast<NTR> (rawNtr > 3 ? 3 : rawNtr);  // 7/0xFF (bateria) → BYPASS(3)
+    ch.ntt           = static_cast<NTT> (data[13] & 0x03);
+    ch.rTag          = (data[13] >> 2) & 0x3F;
+    ch.noteLowLimit  = data[14];
+    ch.noteHighLimit = data[15];
+    ch.muteFlags     = readBE16 (data + 16);
 
     return true;
 }

@@ -49,8 +49,7 @@ void LoopPlayer::playSection (const StyFile::SectionData& section,
         queued.pending = false;
     }
     loadSection (section, sectionId, loop);
-    lastCallNs = juce::Time::getHighResolutionTicks() * 1000LL
-               / (juce::Time::getHighResolutionTicksPerSecond() / 1000LL);
+    lastCallNs = (int64_t)(juce::Time::getMillisecondCounterHiRes() * 1.0e6);  // ns, igual ao hiResTimerCallback
     playing = true;
     paused  = false;
     startTimer (TIMER_INTERVAL_MS);
