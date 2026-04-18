@@ -167,17 +167,12 @@ void FluidSynthEngine::applyProgramChange (int ch)
         return;
     }
 
-    // Canais melódicos: tenta o banco XG original (MSB*128+LSB)
-    fluid_synth_bank_select    (synth, ch, msb * 128 + lsb);
+    // Canais melódicos: sempre usar bank 0 (GM) com o PC.
+    // Bancos XG (MSB=0-126 com LSB variado) são variações do mesmo
+    // instrumento GM no mesmo PC, então bank 0 + PC dá o resultado
+    // mais próximo com SoundFonts GM.
+    fluid_synth_bank_select    (synth, ch, 0);
     fluid_synth_program_change (synth, ch, pc);
-
-    // Se o banco XG não existe no SF2 GM, faz fallback para bank 0
-    fluid_preset_t* preset = fluid_synth_get_channel_preset (synth, ch);
-    if (preset == nullptr && (msb != 0 || lsb != 0))
-    {
-        fluid_synth_bank_select    (synth, ch, 0);
-        fluid_synth_program_change (synth, ch, pc);
-    }
 }
 
 juce::String FluidSynthEngine::getChannelPresetName (int ch) const

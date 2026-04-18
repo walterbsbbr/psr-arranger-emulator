@@ -263,10 +263,10 @@ void StyleEngine::onMidiFromStyle (const juce::MidiMessage& rawMsg)
 
     if (!synthEngine.isDrumBank (sourceCh))
     {
-        // Correção de oitava para canais de Baixo (GM PC 32-39).
-        // Os padrões STY gravam o baixo em registro muito grave.
-        int pc = synthEngine.getChannelProgram (sourceCh);
-        if (pc >= 32 && pc <= 39)
+        // Correção de oitava para canais com notas em registro de baixo.
+        // STY files gravam o baixo em C1/G0 (MIDI 19-36) — precisa subir 2 oitavas
+        // para a tessitura real. Aplica a qualquer canal não-drum com notas graves.
+        if (note < 36)
             note += 24;
 
         ChordInfo chord;

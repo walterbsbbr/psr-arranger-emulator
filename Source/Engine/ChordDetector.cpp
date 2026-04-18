@@ -73,7 +73,11 @@ void ChordDetector::noteOn (int midiNote)
 void ChordDetector::noteOff (int midiNote)
 {
     heldNotes.erase (midiNote);
-    currentChord = heldNotes.empty() ? ChordInfo{} : detect();
+    // PSR behavior: o último acorde fica ativo até o próximo.
+    // Quando todas as teclas são soltas, NÃO reseta o acorde.
+    // Apenas atualiza se ainda há teclas pressionadas.
+    if (!heldNotes.empty())
+        currentChord = detect();
 }
 
 void ChordDetector::reset()
