@@ -10,6 +10,8 @@ public:
     void resized() override;
     void paint   (juce::Graphics& g) override;
 
+    void setStyleName (const juce::String& name);
+
     std::function<void()> onStyleFileRequested;
 
 private:

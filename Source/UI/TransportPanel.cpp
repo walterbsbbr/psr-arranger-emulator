@@ -68,6 +68,14 @@ void TransportPanel::resized()
     }
 }
 
+void TransportPanel::setStyleName (const juce::String& name)
+{
+    if (name.isEmpty())
+        lblStyleName.setText ("(nenhum estilo carregado)", juce::dontSendNotification);
+    else
+        lblStyleName.setText (name, juce::dontSendNotification);
+}
+
 void TransportPanel::paint (juce::Graphics& g)
 {
     g.fillAll (juce::Colour (0xff16213e));

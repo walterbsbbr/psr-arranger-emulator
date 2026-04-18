@@ -115,8 +115,21 @@ void MainComponent::loadStyleFile()
         [this, chooser] (const juce::FileChooser& fc)
         {
             auto file = fc.getResult();
-            if (file.existsAsFile())
-                styleEngine.loadStyle (file);
+            if (!file.existsAsFile()) return;
+
+            if (styleEngine.loadStyle (file))
+            {
+                transportPanel.setStyleName (styleEngine.getStyle().name);
+            }
+            else
+            {
+                transportPanel.setStyleName ("ERRO: " + file.getFileName());
+                juce::AlertWindow::showMessageBoxAsync (
+                    juce::MessageBoxIconType::WarningIcon,
+                    "Erro ao carregar estilo",
+                    "Nao foi possivel carregar:\n" + file.getFullPathName()
+                    + "\n\nVerifique se o arquivo e um STY valido (MIDI com MThd/MTrk).");
+            }
         });
 }
 
