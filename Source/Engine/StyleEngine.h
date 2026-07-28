@@ -69,6 +69,10 @@ public:
     uint8_t getPartVolume (int destCh) const noexcept  { return partVolume[destCh]; }
     bool    isPartMuted   (int destCh) const noexcept  { return partMuted[destCh];  }
 
+    // ── Mixer: transpose de oitava por canal (0-7 = ch9-16), -2..+2 oitavas ──
+    void setPartOctaveShift (int destCh, int octaves);
+    int  getPartOctaveShift (int destCh) const noexcept { return partOctaveShift[destCh]; }
+
     State getState() const noexcept { return state; }
     int   getActiveMainIndex() const noexcept { return activeMainIdx; }
     FluidSynthEngine& getSynthEngine() noexcept { return synthEngine; }
@@ -93,6 +97,7 @@ private:
 
     std::array<uint8_t, 8> partVolume {};
     std::array<bool,    8> partMuted  {};
+    std::array<int,     8> partOctaveShift {};  // -2..+2 oitavas por parte
 
     // Rastreamento de notas ativas para evitar notas presas na mudança de acorde.
     // noteMap[ch][originalNote] = transposedNote que foi enviado no Note On.

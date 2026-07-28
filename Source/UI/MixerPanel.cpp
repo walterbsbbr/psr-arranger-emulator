@@ -1,4 +1,5 @@
 #include "MixerPanel.h"
+#include <cstdlib>
 
 const char* MixerPanel::PART_NAMES[NUM_PARTS] = {
     "Ch 9", "Ch 10", "Ch 11", "Ch 12", "Ch 13", "Ch 14", "Ch 15", "Ch 16"
@@ -12,6 +13,24 @@ MixerPanel::MixerPanel (StyleEngine& engine) : styleEngine (engine)
         lblPart[i].setJustificationType (juce::Justification::centred);
         lblPart[i].setFont (juce::FontOptions (11.0f, juce::Font::bold));
         addAndMakeVisible (lblPart[i]);
+
+        // Transpose de oitava por parte: "-" à esquerda, "+" à direita do rótulo.
+        // Cor indica o deslocamento atual: neutro=0, verde=±1 oitava, laranja=±2.
+        btnOctaveDown[i].setButtonText ("-");
+        btnOctaveDown[i].onClick = [this, i] {
+            styleEngine.setPartOctaveShift (i, styleEngine.getPartOctaveShift (i) - 1);
+            refreshOctaveButtonColours (i);
+        };
+        addAndMakeVisible (btnOctaveDown[i]);
+
+        btnOctaveUp[i].setButtonText ("+");
+        btnOctaveUp[i].onClick = [this, i] {
+            styleEngine.setPartOctaveShift (i, styleEngine.getPartOctaveShift (i) + 1);
+            refreshOctaveButtonColours (i);
+        };
+        addAndMakeVisible (btnOctaveUp[i]);
+
+        refreshOctaveButtonColours (i);
 
         lblProgram[i].setButtonText ("---");
         lblProgram[i].setColour (juce::TextButton::buttonColourId, juce::Colours::transparentBlack);
@@ -64,6 +83,20 @@ void MixerPanel::timerCallback()
         lblProgram[i].setColour (juce::TextButton::textColourOffId,
                                  locked ? juce::Colours::cyan : juce::Colours::lightyellow);
     }
+}
+
+void MixerPanel::refreshOctaveButtonColours (int i)
+{
+    const int shift = styleEngine.getPartOctaveShift (i);
+    juce::Colour colour;
+    switch (std::abs (shift))
+    {
+        case 0:  colour = juce::Colour (0xff2a2a3e); break;   // neutro
+        case 1:  colour = juce::Colours::green;      break;
+        default: colour = juce::Colours::orange;     break;   // 2 (máximo)
+    }
+    btnOctaveDown[i].setColour (juce::TextButton::buttonColourId, colour);
+    btnOctaveUp[i]  .setColour (juce::TextButton::buttonColourId, colour);
 }
 
 void MixerPanel::showPresetPicker (int i, juce::Component* anchor)
@@ -127,7 +160,13 @@ void MixerPanel::resized()
     for (int i = 0; i < NUM_PARTS; ++i)
     {
         auto col = getLocalBounds().removeFromLeft (colW).withX (i * colW).reduced (2, 0);
-        lblPart[i]   .setBounds (col.removeFromTop (lblH));
+
+        auto partRow = col.removeFromTop (lblH);
+        const int octBtnW = juce::jmin (18, partRow.getHeight() + 4);
+        btnOctaveDown[i].setBounds (partRow.removeFromLeft  (octBtnW));
+        btnOctaveUp[i]  .setBounds (partRow.removeFromRight (octBtnW));
+        lblPart[i]      .setBounds (partRow);
+
         lblProgram[i].setBounds (col.removeFromTop (progH));
         col.removeFromTop (2);
         sliderVol[i] .setBounds (col.removeFromTop (volH));

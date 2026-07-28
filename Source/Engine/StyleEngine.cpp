@@ -249,6 +249,21 @@ void StyleEngine::setPartMuted (int destCh, bool mute)
     }
 }
 
+void StyleEngine::setPartOctaveShift (int destCh, int octaves)
+{
+    if (destCh < 0 || destCh > 7) return;
+    octaves = std::clamp (octaves, -2, 2);
+    if (partOctaveShift[destCh] == octaves) return;
+
+    // Notas já soando com o shift antigo ficariam presas (Note Off futuro usaria
+    // o novo shift, tocando a nota errada) -- corta tudo do canal ao trocar.
+    partOctaveShift[destCh] = octaves;
+    auto msg = juce::MidiMessage::allNotesOff (destCh + 9);
+    synthEngine.sendMidiMessage (msg);
+    for (int origNote = 0; origNote < 128; ++origNote)
+        noteMap[destCh + 8][origNote] = -1;
+}
+
 // ─── onMidiFromStyle ─────────────────────────────────────────────────────────
 // Segue a arquitetura real do PSR:
 //  1. Consulta CASM para obter NTR/NTT/HighKey/Limits do canal
@@ -330,6 +345,12 @@ void StyleEngine::onMidiFromStyle (const juce::MidiMessage& rawMsg)
         }
 
         note += transposeOffset;
+
+        // Transpose de oitava por parte (Mixer): não se aplica à bateria --
+        // kits de percussão GM são mapeados por tecla, não por altura, então
+        // "deslocar uma oitava" trocaria de peça em vez de tocar mais agudo/grave.
+        if (partIdx >= 0 && partIdx < 8)
+            note += partOctaveShift[partIdx] * 12;
     }
 
     note = std::clamp (note, 0, 127);

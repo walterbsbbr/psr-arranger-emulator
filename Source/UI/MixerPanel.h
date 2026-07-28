@@ -33,10 +33,15 @@ private:
     /** Abre um menu com os presets do SoundFont carregado para o canal 'ch' (0-indexed). */
     void showPresetPicker (int ch, juce::Component* anchor);
 
+    /** Aplica a cor do botão de oitava (neutro/verde/laranja) conforme o shift atual. */
+    void refreshOctaveButtonColours (int i);
+
     juce::Slider     sliderVol[NUM_PARTS];
     juce::TextButton btnMute[NUM_PARTS];
     juce::Label      lblPart[NUM_PARTS];
     juce::TextButton lblProgram[NUM_PARTS]; // nome do instrumento -- clicável, troca o timbre manualmente
+    juce::TextButton btnOctaveDown[NUM_PARTS]; // "-" ao lado esquerdo do rótulo do canal
+    juce::TextButton btnOctaveUp[NUM_PARTS];   // "+" ao lado direito do rótulo do canal
 
     JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR (MixerPanel)
 };
