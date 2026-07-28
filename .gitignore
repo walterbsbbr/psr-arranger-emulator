@@ -47,3 +47,15 @@ JuceLibraryCode/
 
 # Logs
 *.log
+
+# Reference/test material (nested repos, copyrighted style files) -- not project source
+/public test/
+
+# Compiled diagnostic tool binaries (source .cpp is tracked)
+tools/casm_detail
+tools/ch_notes
+tools/ctab_dump
+tools/midi_trunc_test
+tools/note_dump
+tools/sty_debug
+tools/sysex_dump
