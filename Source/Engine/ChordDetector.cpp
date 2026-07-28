@@ -159,10 +159,20 @@ ChordInfo ChordDetector::detectFingered() const
             classes.push_back (c);
     }
 
-    // Testar todas as raízes e todos os tipos de acorde
-    int bestScore    = 0;
-    int bestRoot     = notes.front() % 12;
-    ChordType bestType = ChordType::Major;
+    // Testar todas as raízes e todos os tipos de acorde.
+    //
+    // Critério principal: completude do match de intervalos (quantas notas do
+    // acorde candidato estão presentes, penalizando notas faltantes E notas
+    // tocadas que não pertencem ao acorde). Isso DOMINA a pontuação.
+    //
+    // "Raiz == nota mais grave" é só um desempate leve (+1), NUNCA o fator
+    // decisivo -- do contrário, qualquer inversão (ex: F/C = C-F-A tocado
+    // com C no baixo) é interpretada como um acorde errado enraizado na nota
+    // do baixo (ex: "Cdim") em vez do acorde completo que realmente bate
+    // (F maior), porque o bônus de "raiz=baixo" superava um match parcial.
+    int bestScore      = -1000000;
+    int bestRoot        = notes.front() % 12;
+    ChordType bestType  = ChordType::Major;
 
     const int numTypes = static_cast<int>(ChordType::Count);
 
@@ -171,19 +181,13 @@ ChordInfo ChordDetector::detectFingered() const
         for (int t = 0; t < numTypes; ++t)
         {
             const auto& intervals = intervalTable[t];
-            int score = scoreMatch (classes, root, intervals);
+            const int matched = scoreMatch (classes, root, intervals);
+            const int missing = (int) intervals.size() - matched;   // chord tones not played
+            const int extra   = (int) classes.size()   - matched;   // played notes outside the chord
 
-            // Bônus: root presente nas notas pressionadas
-            int rootClass = root;
-            bool rootPresent = std::find (classes.begin(), classes.end(), rootClass)
-                               != classes.end();
-            if (rootPresent) score += 2;
+            int score = matched * 100 - missing * 10 - extra * 20;
 
-            // Bônus: raiz coincide com a nota mais grave
-            if (notes.front() % 12 == root) score += 3;
-
-            // Bonus: match completo
-            if (score == (int)intervals.size() + 2 + 3) score += 5;
+            if (notes.front() % 12 == root) score += 1;   // desempate: raiz = nota do baixo
 
             if (score > bestScore)
             {
