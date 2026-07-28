@@ -41,8 +41,9 @@ MixerPanel::MixerPanel (StyleEngine& engine) : styleEngine (engine)
 
         sliderVol[i].setRange (0, 127, 1);
         sliderVol[i].setValue (100, juce::dontSendNotification);
-        sliderVol[i].setSliderStyle (juce::Slider::LinearBarVertical);
+        sliderVol[i].setSliderStyle (juce::Slider::LinearVertical);
         sliderVol[i].setTextBoxStyle (juce::Slider::NoTextBox, true, 0, 0);
+        sliderVol[i].setLookAndFeel (&spriteFaderLnf);
         sliderVol[i].onValueChange = [this, i] {
             styleEngine.setPartVolume (i, (uint8_t)sliderVol[i].getValue());
         };
@@ -61,6 +62,13 @@ MixerPanel::MixerPanel (StyleEngine& engine) : styleEngine (engine)
     }
 
     startTimer (500);
+}
+
+MixerPanel::~MixerPanel()
+{
+    stopTimer();
+    for (int i = 0; i < NUM_PARTS; ++i)
+        sliderVol[i].setLookAndFeel (nullptr);
 }
 
 void MixerPanel::timerCallback()

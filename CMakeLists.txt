@@ -21,6 +21,14 @@ FetchContent_MakeAvailable(JUCE)
 find_package(PkgConfig REQUIRED)
 pkg_check_modules(FLUIDSYNTH REQUIRED fluidsynth)
 
+# ─── Embedded assets (sprites etc.) ──────────────────────────────────────────
+# Bundled straight into the binary so the .app stays self-contained -- this
+# project gets copied to a second Mac for testing that has no dev tools, so
+# nothing can depend on an absolute path that only exists on this machine.
+juce_add_binary_data(PSREmulatorAssets SOURCES
+    Resources/MB_SLIDER.png
+)
+
 # ─── Application target ───────────────────────────────────────────────────────
 juce_add_gui_app(PSREmulator
     PRODUCT_NAME        "PSR Arranger Emulator"
@@ -53,6 +61,7 @@ target_sources(PSREmulator PRIVATE
     Source/UI/MixerPanel.cpp
     Source/UI/ChordDisplay.cpp
     Source/UI/SetupDialog.cpp
+    Source/UI/SpriteFaderLookAndFeel.cpp
 )
 
 target_include_directories(PSREmulator PRIVATE
@@ -76,6 +85,7 @@ target_link_libraries(PSREmulator PRIVATE
     juce::juce_gui_extra
     juce::juce_recommended_config_flags
     juce::juce_recommended_warning_flags
+    PSREmulatorAssets
     ${FLUIDSYNTH_LIBRARIES}
 )
 

@@ -1,6 +1,7 @@
 #pragma once
 #include <JuceHeader.h>
 #include "../Engine/StyleEngine.h"
+#include "SpriteFaderLookAndFeel.h"
 
 /**
  * MixerPanel
@@ -16,7 +17,7 @@ class MixerPanel : public juce::Component,
 {
 public:
     explicit MixerPanel (StyleEngine& engine);
-    ~MixerPanel() override { stopTimer(); }
+    ~MixerPanel() override;
     void resized() override;
     void paint   (juce::Graphics& g) override;
 
@@ -35,6 +36,8 @@ private:
 
     /** Aplica a cor do botão de oitava (neutro/verde/laranja) conforme o shift atual. */
     void refreshOctaveButtonColours (int i);
+
+    SpriteFaderLookAndFeel spriteFaderLnf;
 
     juce::Slider     sliderVol[NUM_PARTS];
     juce::TextButton btnMute[NUM_PARTS];
