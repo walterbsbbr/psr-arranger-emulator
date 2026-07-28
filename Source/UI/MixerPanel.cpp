@@ -13,10 +13,11 @@ MixerPanel::MixerPanel (StyleEngine& engine) : styleEngine (engine)
         lblPart[i].setFont (juce::FontOptions (11.0f, juce::Font::bold));
         addAndMakeVisible (lblPart[i]);
 
-        lblProgram[i].setText ("---", juce::dontSendNotification);
-        lblProgram[i].setJustificationType (juce::Justification::centred);
-        lblProgram[i].setFont (juce::FontOptions (9.0f));
-        lblProgram[i].setColour (juce::Label::textColourId, juce::Colours::lightyellow);
+        lblProgram[i].setButtonText ("---");
+        lblProgram[i].setColour (juce::TextButton::buttonColourId, juce::Colours::transparentBlack);
+        lblProgram[i].setColour (juce::TextButton::buttonOnColourId, juce::Colours::transparentBlack);
+        lblProgram[i].setColour (juce::TextButton::textColourOffId, juce::Colours::lightyellow);
+        lblProgram[i].onClick = [this, i] { showPresetPicker (i, &lblProgram[i]); };
         addAndMakeVisible (lblProgram[i]);
 
         sliderVol[i].setRange (0, 127, 1);
@@ -55,9 +56,64 @@ void MixerPanel::timerCallback()
         else if (name.length() > 12)
             name = name.substring (0, 12);
 
-        if (lblProgram[i].getText() != name)
-            lblProgram[i].setText (name, juce::dontSendNotification);
+        if (lblProgram[i].getButtonText() != name)
+            lblProgram[i].setButtonText (name);
+
+        // Timbre travado manualmente: destaca em ciano em vez de amarelo.
+        const bool locked = synth.isChannelOverridden (ch);
+        lblProgram[i].setColour (juce::TextButton::textColourOffId,
+                                 locked ? juce::Colours::cyan : juce::Colours::lightyellow);
     }
+}
+
+void MixerPanel::showPresetPicker (int i, juce::Component* anchor)
+{
+    const int ch = FIRST_STYLE_CH + i; // 0-indexed
+    auto& synth = styleEngine.getSynthEngine();
+    auto presets = synth.listPresets();
+
+    juce::PopupMenu menu;
+    menu.addItem (1, "Seguir o estilo (auto)", true, !synth.isChannelOverridden (ch));
+    menu.addSeparator();
+
+    if (presets.empty())
+    {
+        menu.addItem (0, "(carregue um SoundFont primeiro)", false);
+    }
+    else
+    {
+        int itemId = 100;
+        int lastBank = -1;
+        juce::PopupMenu bankMenu;
+        for (auto& p : presets)
+        {
+            if (p.bank != lastBank)
+            {
+                if (lastBank != -1)
+                    menu.addSubMenu ("Bank " + juce::String (lastBank), bankMenu);
+                bankMenu = juce::PopupMenu();
+                lastBank = p.bank;
+            }
+            bankMenu.addItem (itemId++, juce::String (p.program) + "  " + p.name);
+        }
+        if (lastBank != -1)
+            menu.addSubMenu ("Bank " + juce::String (lastBank), bankMenu);
+    }
+
+    menu.showMenuAsync (juce::PopupMenu::Options().withTargetComponent (anchor),
+        [this, ch, presets] (int result)
+        {
+            if (result == 0) return;
+            auto& synth2 = styleEngine.getSynthEngine();
+            if (result == 1)
+            {
+                synth2.clearChannelPresetOverride (ch);
+                return;
+            }
+            const int idx = result - 100;
+            if (idx >= 0 && idx < (int) presets.size())
+                synth2.setChannelPresetOverride (ch, presets[(size_t) idx].bank, presets[(size_t) idx].program);
+        });
 }
 
 void MixerPanel::resized()

@@ -29,6 +29,7 @@ bool StyleEngine::loadStyle (const juce::File& styFile)
 {
     player->stop();
     synthEngine.allNotesOff();
+    synthEngine.clearAllPresetOverrides();  // novo estilo: solta timbres travados manualmente
 
     currentSty = StyParser::parse (styFile);
     if (!currentSty.valid)

@@ -3,6 +3,15 @@
 #include <fluidsynth.h>
 #include <array>
 #include <string>
+#include <vector>
+
+/** Um preset (instrumento) disponível no SoundFont carregado. */
+struct SoundFontPresetInfo
+{
+    int bank;
+    int program;
+    juce::String name;
+};
 
 /**
  * FluidSynthEngine
@@ -54,6 +63,27 @@ public:
     /** Retorna true se o canal foi configurado como drum bank (MSB=127) */
     bool isDrumBank (int ch) const noexcept { return ch >= 0 && ch < 16 && bankMsb[ch] == 127; }
 
+    // ── Seleção manual de timbre (painel/mixer) ──────────────────────────────
+
+    /** Lista todos os presets do SoundFont carregado, ordenados por banco/programa. */
+    std::vector<SoundFontPresetInfo> listPresets() const;
+
+    /**
+     * Atribui explicitamente um preset (banco/programa exatos, vindos de
+     * listPresets()) a um canal, ignorando qualquer fallback/cascata de banco.
+     * Marca o canal como "travado": Program Changes vindos do arquivo STY
+     * deixam de afetá-lo até clearChannelPresetOverride() ser chamado.
+     */
+    void setChannelPresetOverride (int channel, int bank, int program);
+
+    /** Libera o canal para voltar a seguir os Program Changes do STY. */
+    void clearChannelPresetOverride (int channel);
+
+    /** Libera todos os canais (chamado ao carregar um novo estilo). */
+    void clearAllPresetOverrides();
+
+    bool isChannelOverridden (int ch) const noexcept { return ch >= 0 && ch < 16 && overridden[ch]; }
+
 private:
     void applyProgramChange (int channel); // 0-indexed
 
@@ -68,6 +98,7 @@ private:
     std::array<int, 16> bankMsb {};
     std::array<int, 16> bankLsb {};
     std::array<int, 16> programNum {};
+    std::array<bool, 16> overridden {};   // true = timbre travado manualmente
 
     juce::CriticalSection synthLock;
 

@@ -1,4 +1,5 @@
 #include "FluidSynthEngine.h"
+#include <algorithm>
 
 FluidSynthEngine::FluidSynthEngine()
 {
@@ -119,6 +120,7 @@ void FluidSynthEngine::sendMidiMessage (const juce::MidiMessage& msg)
     }
     else if (msg.isProgramChange())
     {
+        if (overridden[ch]) return;   // timbre travado manualmente: ignora o STY
         programNum[ch] = msg.getProgramChangeNumber();
         applyProgramChange (ch);
     }
@@ -211,4 +213,58 @@ void FluidSynthEngine::resetAllControllers()
     if (synth == nullptr) return;
     for (int ch = 0; ch < 16; ++ch)
         fluid_synth_cc (synth, ch, 121, 0); // CC 121 = Reset All Controllers
+}
+
+// ── Seleção manual de timbre ────────────────────────────────────────────────
+std::vector<SoundFontPresetInfo> FluidSynthEngine::listPresets() const
+{
+    juce::ScopedLock sl (synthLock);
+    std::vector<SoundFontPresetInfo> result;
+    if (synth == nullptr || soundFontId < 0) return result;
+
+    fluid_sfont_t* sfont = fluid_synth_get_sfont_by_id (synth, (unsigned int) soundFontId);
+    if (sfont == nullptr) return result;
+
+    fluid_sfont_iteration_start (sfont);
+    fluid_preset_t* preset = nullptr;
+    while ((preset = fluid_sfont_iteration_next (sfont)) != nullptr)
+    {
+        SoundFontPresetInfo info;
+        info.bank    = fluid_preset_get_banknum (preset);
+        info.program = fluid_preset_get_num (preset);
+        const char* name = fluid_preset_get_name (preset);
+        info.name    = name != nullptr ? juce::String (name) : juce::String ("Preset");
+        result.push_back (info);
+    }
+
+    std::sort (result.begin(), result.end(), [] (const SoundFontPresetInfo& a, const SoundFontPresetInfo& b)
+    {
+        if (a.bank != b.bank) return a.bank < b.bank;
+        return a.program < b.program;
+    });
+    return result;
+}
+
+void FluidSynthEngine::setChannelPresetOverride (int ch, int bank, int program)
+{
+    juce::ScopedLock sl (synthLock);
+    if (synth == nullptr || ch < 0 || ch > 15) return;
+
+    overridden[ch]  = true;
+    bankMsb[ch]     = bank;
+    programNum[ch]  = program;
+
+    fluid_synth_bank_select    (synth, ch, (unsigned int) bank);
+    fluid_synth_program_change (synth, ch, program);
+}
+
+void FluidSynthEngine::clearChannelPresetOverride (int ch)
+{
+    if (ch < 0 || ch > 15) return;
+    overridden[ch] = false;
+}
+
+void FluidSynthEngine::clearAllPresetOverrides()
+{
+    overridden.fill (false);
 }
