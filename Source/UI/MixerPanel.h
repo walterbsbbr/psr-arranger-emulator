@@ -40,6 +40,7 @@ private:
     SpriteFaderLookAndFeel spriteFaderLnf;
 
     juce::Slider     sliderVol[NUM_PARTS];
+    juce::TextButton btnSolo[NUM_PARTS];
     juce::TextButton btnMute[NUM_PARTS];
     juce::Label      lblPart[NUM_PARTS];
     juce::TextButton lblProgram[NUM_PARTS]; // nome do instrumento -- clicável, troca o timbre manualmente

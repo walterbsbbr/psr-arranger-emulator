@@ -46,6 +46,19 @@ void StylePanel::buildButtons()
         addAndMakeVisible (btnEnding[i]);
     }
 
+    // ── Rótulos de grupo ──────────────────────────────────────────────────
+    lblIntro.setText  ("INTRO",  juce::dontSendNotification);
+    lblMain.setText   ("MAIN",   juce::dontSendNotification);
+    lblFill.setText   ("FILL",   juce::dontSendNotification);
+    lblEnding.setText ("ENDING", juce::dontSendNotification);
+    for (auto* l : { &lblIntro, &lblMain, &lblFill, &lblEnding })
+    {
+        l->setFont (juce::FontOptions (12.0f, juce::Font::bold));
+        l->setColour (juce::Label::textColourId, juce::Colours::grey);
+        l->setJustificationType (juce::Justification::centredLeft);
+        addAndMakeVisible (*l);
+    }
+
     // ── Start/Stop ────────────────────────────────────────────────────────
     btnStartStop.setButtonText ("START");
     btnStartStop.setColour (juce::TextButton::buttonColourId, juce::Colours::darkgreen);
@@ -66,46 +79,44 @@ void StylePanel::buildButtons()
     addAndMakeVisible (btnStartStop);
 }
 
+// Layout em grade: todas as linhas com a mesma altura, botões de cada linha
+// dividindo igualmente a largura disponível (em vez de largura fixa por
+// botão) -- assim toda linha ocupa a largura toda e nenhum botão fica maior
+// ou menor que os outros da mesma fileira. Um rótulo fixo à esquerda
+// identifica cada grupo (INTRO/MAIN/FILL/ENDING).
 void StylePanel::resized()
 {
-    auto area = getLocalBounds().reduced (4);
-    const int btnH  = 36;
-    const int gap   = 4;
+    auto area = getLocalBounds().reduced (8);
+    const int labelW    = 56;
+    const int gap       = 6;
+    const int startStopH = 44;
 
-    // Linha 1: Intro
+    const int rowsAvailable = 4;
+    const int totalGapH = gap * (rowsAvailable - 1) + gap * 2 /* antes do Start/Stop */;
+    const int rowH = (area.getHeight() - startStopH - totalGapH) / rowsAvailable;
+
+    auto layoutRow = [&] (juce::Label& label, juce::TextButton* buttons, int count)
     {
-        auto row = area.removeFromTop (btnH);
-        for (int i = 0; i < 3; ++i)
-            btnIntro[i].setBounds (row.removeFromLeft (90).reduced (gap / 2, 0));
-    }
+        auto row = area.removeFromTop (rowH);
+        label.setBounds (row.removeFromLeft (labelW));
+        row.removeFromLeft (gap);
+
+        const int btnW = (row.getWidth() - gap * (count - 1)) / count;
+        for (int i = 0; i < count; ++i)
+        {
+            buttons[i].setBounds (row.removeFromLeft (btnW));
+            if (i < count - 1) row.removeFromLeft (gap);
+        }
+        area.removeFromTop (gap);
+    };
+
+    layoutRow (lblIntro,  btnIntro,  3);
+    layoutRow (lblMain,   btnMain,   4);
+    layoutRow (lblFill,   btnFill,   4);
+    layoutRow (lblEnding, btnEnding, 3);
+
     area.removeFromTop (gap);
-
-    // Linha 2: Main
-    {
-        auto row = area.removeFromTop (btnH);
-        for (int i = 0; i < 4; ++i)
-            btnMain[i].setBounds (row.removeFromLeft (80).reduced (gap / 2, 0));
-    }
-    area.removeFromTop (gap);
-
-    // Linha 3: Fill
-    {
-        auto row = area.removeFromTop (btnH);
-        for (int i = 0; i < 4; ++i)
-            btnFill[i].setBounds (row.removeFromLeft (80).reduced (gap / 2, 0));
-    }
-    area.removeFromTop (gap);
-
-    // Linha 4: Ending
-    {
-        auto row = area.removeFromTop (btnH);
-        for (int i = 0; i < 3; ++i)
-            btnEnding[i].setBounds (row.removeFromLeft (90).reduced (gap / 2, 0));
-    }
-    area.removeFromTop (gap * 2);
-
-    // Linha 5: Start/Stop
-    btnStartStop.setBounds (area.removeFromLeft (120).withHeight (btnH));
+    btnStartStop.setBounds (area.removeFromTop (startStopH));
 }
 
 void StylePanel::paint (juce::Graphics& g)

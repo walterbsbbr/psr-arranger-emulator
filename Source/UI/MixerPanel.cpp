@@ -7,11 +7,20 @@ const char* MixerPanel::PART_NAMES[NUM_PARTS] = {
 
 MixerPanel::MixerPanel (StyleEngine& engine) : styleEngine (engine)
 {
+    // Aplica ao painel inteiro (não só ao slider): também padroniza a fonte
+    // de todos os TextButton filhos (nome do instrumento, +/-, S, M), que
+    // senão calculariam um tamanho minúsculo a partir da altura baixa das
+    // linhas do Mixer.
+    setLookAndFeel (&spriteFaderLnf);
+
     for (int i = 0; i < NUM_PARTS; ++i)
     {
+        // Mesmo tamanho de fonte usado nos rótulos dos outros painéis (Style/
+        // Transport) -- antes ficava menor porque as linhas do Mixer são
+        // baixas e os botões calculam a fonte a partir da própria altura.
         lblPart[i].setText (PART_NAMES[i], juce::dontSendNotification);
         lblPart[i].setJustificationType (juce::Justification::centred);
-        lblPart[i].setFont (juce::FontOptions (11.0f, juce::Font::bold));
+        lblPart[i].setFont (juce::FontOptions (14.0f, juce::Font::bold));
         addAndMakeVisible (lblPart[i]);
 
         // Transpose de oitava por parte: "-" à esquerda, "+" à direita do rótulo.
@@ -49,13 +58,24 @@ MixerPanel::MixerPanel (StyleEngine& engine) : styleEngine (engine)
         };
         addAndMakeVisible (sliderVol[i]);
 
+        btnSolo[i].setButtonText ("S");
+        btnSolo[i].setColour (juce::TextButton::buttonColourId, juce::Colour (0xff2a2a3e));
+        btnSolo[i].onClick = [this, i] {
+            const bool nowSoloed = !styleEngine.isPartSoloed (i);
+            styleEngine.setPartSoloed (i, nowSoloed);
+            btnSolo[i].setColour (juce::TextButton::buttonColourId,
+                                  nowSoloed ? juce::Colours::green
+                                            : juce::Colour (0xff2a2a3e));
+        };
+        addAndMakeVisible (btnSolo[i]);
+
         btnMute[i].setButtonText ("M");
         btnMute[i].setColour (juce::TextButton::buttonColourId, juce::Colour (0xff2a2a3e));
         btnMute[i].onClick = [this, i] {
             const bool nowMuted = !styleEngine.isPartMuted (i);
             styleEngine.setPartMuted (i, nowMuted);
             btnMute[i].setColour (juce::TextButton::buttonColourId,
-                                  nowMuted ? juce::Colours::darkred
+                                  nowMuted ? juce::Colours::green
                                            : juce::Colour (0xff2a2a3e));
         };
         addAndMakeVisible (btnMute[i]);
@@ -69,6 +89,7 @@ MixerPanel::~MixerPanel()
     stopTimer();
     for (int i = 0; i < NUM_PARTS; ++i)
         sliderVol[i].setLookAndFeel (nullptr);
+    setLookAndFeel (nullptr);
 }
 
 void MixerPanel::timerCallback()
@@ -160,26 +181,57 @@ void MixerPanel::showPresetPicker (int i, juce::Component* anchor)
 void MixerPanel::resized()
 {
     const int colW  = getWidth() / NUM_PARTS;
-    const int lblH  = 16;
-    const int progH = 14;
-    const int muteH = 24;
-    const int volH  = getHeight() - lblH - progH - muteH - 12;
+
+    // Cada faixa de canal tem uma largura FIXA (não estica com a janela) --
+    // sobra de espaço numa coluna larga vira margem dos dois lados em vez de
+    // esticar rótulos/botões/fader desproporcionalmente. Mesma lógica do
+    // limite de escala do fader (SpriteFaderLookAndFeel): sobra = margem,
+    // nunca distorção.
+    const int stripW = juce::jlimit (72, 110, colW - 8);
+
+    const int lblH  = 22;
+    const int progH = 22;
+    const int muteH = 26;
+    const int gapH  = 6;
+
+    // Altura do fader também tem um teto: o sprite nativo tem só 128px, então
+    // deixar essa área crescer com a janela (como antes) sobrava uma caixa
+    // enorme em volta de um desenho pequeno e travado -- tão desproporcional
+    // quanto esticar a imagem. 170px dá uma folga pequena acima/abaixo do
+    // sprite sem deixar vazio excessivo.
+    const int maxVolH = 170;
 
     for (int i = 0; i < NUM_PARTS; ++i)
     {
-        auto col = getLocalBounds().removeFromLeft (colW).withX (i * colW).reduced (2, 0);
+        auto fullCol = getLocalBounds().removeFromLeft (colW).withX (i * colW);
+
+        const int availableForVol = fullCol.getHeight() - lblH - progH - muteH - gapH * 3;
+        const int volH = juce::jlimit (60, maxVolH, availableForVol);
+        const int contentH = lblH + gapH + progH + gapH + volH + gapH + muteH;
+
+        // Centraliza a faixa inteira (rótulo+programa+fader+botões) dentro da
+        // coluna, nos dois eixos -- se sobrar altura (janela grande), vira
+        // margem acima/abaixo da faixa toda, não esticamento do fader.
+        auto col = fullCol.withSizeKeepingCentre (stripW, juce::jmin (contentH, fullCol.getHeight()));
 
         auto partRow = col.removeFromTop (lblH);
-        const int octBtnW = juce::jmin (18, partRow.getHeight() + 4);
+        const int octBtnW = juce::jmin (20, partRow.getHeight() + 4);
         btnOctaveDown[i].setBounds (partRow.removeFromLeft  (octBtnW));
         btnOctaveUp[i]  .setBounds (partRow.removeFromRight (octBtnW));
         lblPart[i]      .setBounds (partRow);
 
+        col.removeFromTop (gapH);
         lblProgram[i].setBounds (col.removeFromTop (progH));
-        col.removeFromTop (2);
+        col.removeFromTop (gapH);
         sliderVol[i] .setBounds (col.removeFromTop (volH));
-        col.removeFromTop (4);
-        btnMute[i]   .setBounds (col.removeFromTop (muteH));
+        col.removeFromTop (gapH);
+
+        auto muteRow = col.removeFromTop (muteH);
+        const int gap  = 6;
+        const int btnW = (muteRow.getWidth() - gap) / 2;
+        btnSolo[i].setBounds (muteRow.removeFromLeft (btnW));
+        muteRow.removeFromLeft (gap);
+        btnMute[i].setBounds (muteRow);
     }
 }
 

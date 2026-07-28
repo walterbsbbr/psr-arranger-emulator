@@ -63,11 +63,13 @@ public:
     void   setTranspose (int semitones);  // -12 a +12
     int    getTranspose () const noexcept { return transposeOffset; }
 
-    // ── Mixer: volume e mute por canal de destino (0-7 = ch9-16) ────────────
+    // ── Mixer: volume, mute e solo por canal de destino (0-7 = ch9-16) ──────
     void setPartVolume (int destCh, uint8_t volume);   // 0-127
     void setPartMuted  (int destCh, bool mute);
+    void setPartSoloed (int destCh, bool solo);
     uint8_t getPartVolume (int destCh) const noexcept  { return partVolume[destCh]; }
     bool    isPartMuted   (int destCh) const noexcept  { return partMuted[destCh];  }
+    bool    isPartSoloed  (int destCh) const noexcept  { return partSoloed[destCh]; }
 
     // ── Mixer: transpose de oitava por canal (0-7 = ch9-16), -2..+2 oitavas ──
     void setPartOctaveShift (int destCh, int octaves);
@@ -97,6 +99,7 @@ private:
 
     std::array<uint8_t, 8> partVolume {};
     std::array<bool,    8> partMuted  {};
+    std::array<bool,    8> partSoloed {};
     std::array<int,     8> partOctaveShift {};  // -2..+2 oitavas por parte
 
     // Rastreamento de notas ativas para evitar notas presas na mudança de acorde.

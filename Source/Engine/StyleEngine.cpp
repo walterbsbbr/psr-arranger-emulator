@@ -1,5 +1,6 @@
 #include "StyleEngine.h"
 #include "MidiRouter.h"
+#include <algorithm>
 
 StyleEngine::StyleEngine (FluidSynthEngine& synth, MidiRouter& router)
     : synthEngine (synth), midiRouter (router)
@@ -242,11 +243,17 @@ void StyleEngine::setPartMuted (int destCh, bool mute)
 {
     if (destCh < 0 || destCh > 7) return;
     partMuted[destCh] = mute;
-    if (mute)
-    {
-        auto msg = juce::MidiMessage::allNotesOff (destCh + 9);
-        synthEngine.sendMidiMessage (msg);
-    }
+    // Mute/solo interagem (solo pode silenciar canais que não foram mexidos
+    // agora), então corta tudo em vez de só o canal deste botão -- evita
+    // notas presas em qualquer canal cuja audibilidade mudou.
+    synthEngine.allNotesOff();
+}
+
+void StyleEngine::setPartSoloed (int destCh, bool solo)
+{
+    if (destCh < 0 || destCh > 7) return;
+    partSoloed[destCh] = solo;
+    synthEngine.allNotesOff();
 }
 
 void StyleEngine::setPartOctaveShift (int destCh, int octaves)
@@ -290,10 +297,17 @@ void StyleEngine::onMidiFromStyle (const juce::MidiMessage& rawMsg)
     const bool isDrum = (hasCasm && casmCh.ntr == NTR::BYPASS)
                       || synthEngine.isDrumBank (sourceCh);
 
-    // ── Mute: usa destChannel do CASM para o partIdx ─────────────────────────
+    // ── Mute/Solo: usa destChannel do CASM para o partIdx ────────────────────
+    // Se qualquer parte estiver em solo, só as partes soladas soam --
+    // independente do próprio mute individual delas.
     const int destCh  = hasCasm ? casmCh.destChannel : sourceCh;
     const int partIdx = destCh - 8;
-    if (partIdx >= 0 && partIdx < 8 && partMuted[partIdx]) return;
+    if (partIdx >= 0 && partIdx < 8)
+    {
+        const bool anySoloed = std::any_of (partSoloed.begin(), partSoloed.end(), [] (bool b) { return b; });
+        const bool audible = anySoloed ? partSoloed[partIdx] : !partMuted[partIdx];
+        if (!audible) return;
+    }
 
     // ── CC, PC, SysEx: enviar diretamente ────────────────────────────────────
     if (!rawMsg.isNoteOn() && !rawMsg.isNoteOff())
