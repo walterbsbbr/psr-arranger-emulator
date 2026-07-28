@@ -174,7 +174,7 @@ ChordInfo ChordDetector::detectFingered() const
     int bestRoot        = notes.front() % 12;
     ChordType bestType  = ChordType::Major;
 
-    const int numTypes = static_cast<int>(ChordType::Count);
+    const int numTypes = CALIBRATION_TYPE_LIMIT;
 
     for (int root = 0; root < 12; ++root)
     {

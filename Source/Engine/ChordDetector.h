@@ -92,5 +92,14 @@ private:
     // Tabela de intervalos por ChordType
     static const std::array<std::vector<int>, static_cast<int>(ChordType::Count)> intervalTable;
 
+    // ── Calibração incremental ────────────────────────────────────────────────
+    // Restringe a busca de acorde aos primeiros N tipos da tabela (ordem:
+    // Major, Minor, Dominant7, Major7, ...). Enquanto calibramos o algoritmo
+    // de detecção (fundamental correta em inversões etc.), testamos só com
+    // Major/Minor -- menos graus de liberdade, mais fácil isolar o problema.
+    // Depois de validado, subir esse número para reintroduzir 7ths, sus,
+    // diminished, etc. um de cada vez.
+    static constexpr int CALIBRATION_TYPE_LIMIT = 2;  // Major, Minor
+
     JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR (ChordDetector)
 };
