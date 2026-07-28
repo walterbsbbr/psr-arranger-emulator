@@ -330,13 +330,23 @@ void StyleEngine::onMidiFromStyle (const juce::MidiMessage& rawMsg)
 
         if (chord.valid)
         {
-            // Usar TransposeEngine com os parâmetros CASM do canal:
-            // NTR::ROOT   → shift paralelo (Phrase/melody)
-            // NTR::GUITAR → Root Fixed / close-voice (Chord/Pad)
-            // NTR::BASS   → segue fundamental (Bass)
-            // NTR::BYPASS → sem transposição
             NTR ntr = hasCasm ? casmCh.ntr : NTR::ROOT;
             NTT ntt = hasCasm ? casmCh.ntt : NTT::MELODY;
+
+            // Bass/Chord1/Chord2/Pad (partIdx 2-5) SEMPRE encaixam nas notas
+            // literais do acorde detectado (NTR::GUITAR), ignorando o que o
+            // byte NTR/NTT do CASM diz. Esses são, por definição do canal de
+            // destino, os canais que devem soar exatamente o acorde -- e o
+            // campo NTR/NTT do CASM se mostrou pouco confiável nos arquivos
+            // reais testados (já vimos ele produzir NTR::BASS/ROOT, que fazem
+            // deslocamento cru e podem sair do acorde, gerando dissonância
+            // tipo "Am tocando com G#"). "Am tem que ser Am", literal.
+            if (partIdx >= 2 && partIdx <= 5)
+            {
+                ntr = NTR::GUITAR;
+                ntt = NTT::CHORD;
+            }
+
             int hk  = hasCasm ? casmCh.highKey : 127;
             int lo  = hasCasm ? casmCh.noteLowLimit  : 0;
             int hi  = hasCasm ? casmCh.noteHighLimit  : 127;

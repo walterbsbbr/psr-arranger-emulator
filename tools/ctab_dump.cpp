@@ -16,8 +16,8 @@ static std::string asciiSafe(const uint8_t* p, size_t len) {
     return s;
 }
 
-int main() {
-    const char* path = "/Volumes/STORAGE/PSR_EMU/public test/ESTILOS PSR/ROCK01.STY";
+int main(int argc, char** argv) {
+    const char* path = argc > 1 ? argv[1] : "/Volumes/STORAGE/PSR_EMU/public test/ESTILOS PSR/ROCK01.STY";
 
     std::ifstream file(path, std::ios::binary | std::ios::ate);
     if (!file.is_open()) { printf("Cannot open %s\n", path); return 1; }
