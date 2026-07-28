@@ -120,31 +120,27 @@ int TransposeEngine::transposeGuitar (int note, const ChordInfo& chord, NTT ntt)
 
     if (targetNotes.empty()) return transposeRoot (note, chord);
 
-    // ── Fonte: CMaj = {C=0, E=4, G=7} (ou escala {0,2,4,5,7,9,11})
-    const auto& srcNotes = (ntt == NTT::CHORD)
-                         ? std::vector<int>{ 0, 4, 7 }
-                         : std::vector<int>{ 0, 2, 4, 5, 7, 9, 11 };
-
-    // Encontrar o grau fonte mais próximo
-    int bestSrcDeg = 0, bestDist = 12;
-    for (int d = 0; d < (int)srcNotes.size(); ++d)
+    // Mapear a nota direto para o tom do acorde/escala alvo mais próximo
+    // (distância circular), em vez de tentar reconstruir "que grau ela era"
+    // na gravação fonte e aplicar um deslocamento cru a partir dele.
+    //
+    // Padrões STY reais gravados nos canais de acorde (Chord1/Chord2) quase
+    // sempre têm notas de cor (7ª, 9ª) além da tríade pura. A abordagem
+    // anterior comparava contra só 3 pontos de referência fonte {0,4,7} e
+    // aplicava o offset resultante ao alvo -- para uma nota de cor que não é
+    // raiz/3ª/5ª, isso produz um deslocamento sem relação musical real com o
+    // acorde alvo, gerando intervalos dissonantes (m9 etc.) que trocam a
+    // cada mudança de acorde. Encaixar direto no tom-alvo mais próximo
+    // garante que a nota resultante SEMPRE pertence ao acorde/escala alvo.
+    int bestClass = targetNotes[0], bestDist = 12;
+    for (int t : targetNotes)
     {
-        int dist = std::abs (noteClass - srcNotes[d]);
+        int dist = std::abs (noteClass - t);
         if (dist > 6) dist = 12 - dist;
-        if (dist < bestDist) { bestDist = dist; bestSrcDeg = d; }
+        if (dist < bestDist) { bestDist = dist; bestClass = t; }
     }
 
-    // Offset da nota original em relação ao chord/scale tone fonte
-    int offset = noteClass - srcNotes[bestSrcDeg];
-    if (offset < -6) offset += 12;
-    if (offset >  6) offset -= 12;
-
-    // Mapear grau→grau (1st→1st, 3rd→3rd, 5th→5th)
-    int targetDeg = bestSrcDeg;
-    if (targetDeg >= (int)targetNotes.size())
-        targetDeg = (int)targetNotes.size() - 1;
-
-    int targetClass = (targetNotes[targetDeg] + offset + 12) % 12;
+    int targetClass = bestClass;
 
     // ── ROOT FIXED: escolher a oitava mais próxima da nota original ──────────
     // Isso evita que os acordes "pulem" de oitava bruscamente.
